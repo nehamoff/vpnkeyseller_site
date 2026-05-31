@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { pool } from "../db.js";
-import { sendVerificationCode } from "../email.js";
+import { sendVerificationCode, sendPasswordChangedNotification } from "../email.js";
 
 const router = Router();
 
@@ -30,6 +30,22 @@ function validatePassword(password) {
     return `Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов`;
   }
   return null;
+}
+
+function getAuthUserId(req) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    return payload.sub;
+  } catch {
+    return null;
+  }
 }
 
 router.post("/register", async (req, res) => {
@@ -237,17 +253,15 @@ router.post("/login", async (req, res) => {
 
 router.get("/me", async (req, res) => {
   try {
-    const header = req.headers.authorization || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+    const userId = getAuthUserId(req);
 
-    if (!token) {
+    if (!userId) {
       return res.status(401).json({ error: "Требуется авторизация" });
     }
 
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
     const result = await pool.query(
       "SELECT id, email, email_verified, created_at FROM users WHERE id = $1",
-      [payload.sub],
+      [userId],
     );
 
     if (result.rows.length === 0) {
@@ -257,6 +271,66 @@ router.get("/me", async (req, res) => {
     res.json({ user: result.rows[0] });
   } catch {
     res.status(401).json({ error: "Недействительный токен" });
+  }
+});
+
+router.post("/change-password", async (req, res) => {
+  try {
+    const userId = getAuthUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Требуется авторизация" });
+    }
+
+    const currentPassword = req.body.currentPassword || "";
+    const newPassword = req.body.newPassword || "";
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "Укажите текущий и новый пароль" });
+    }
+
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      return res.status(400).json({ error: passwordError });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ error: "Новый пароль должен отличаться от текущего" });
+    }
+
+    const result = await pool.query(
+      "SELECT id, email, password_hash, email_verified FROM users WHERE id = $1",
+      [userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Пользователь не найден" });
+    }
+
+    const user = result.rows[0];
+
+    const valid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: "Неверный текущий пароль" });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+
+    await pool.query(
+      "UPDATE users SET password_hash = $1 WHERE id = $2",
+      [passwordHash, userId],
+    );
+
+    try {
+      await sendPasswordChangedNotification(user.email);
+    } catch (emailError) {
+      console.error("Password changed but email notification failed:", emailError);
+    }
+
+    res.json({ message: "Пароль успешно изменён. Уведомление отправлено на email." });
+  } catch (error) {
+    console.error("Change password error:", error);
+    res.status(500).json({ error: "Не удалось изменить пароль" });
   }
 });
 

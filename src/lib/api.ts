@@ -109,9 +109,16 @@ export const authApi = {
   },
 
   me() {
-    return request<{ user: { id: number; email: string; email_verified: boolean } }>(
+    return request<{ user: { id: number; email: string; email_verified: boolean; created_at: string } }>(
       "/auth/me",
     );
+  },
+
+  changePassword(currentPassword: string, newPassword: string) {
+    return request<{ message: string }>("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
   },
 
   health() {

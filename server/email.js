@@ -39,6 +39,27 @@ export async function sendVerificationCode(email, code) {
   });
 }
 
+export async function sendPasswordChangedNotification(email) {
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const appName = process.env.APP_NAME || "Кофемания VPN";
+  const changedAt = new Date().toLocaleString("ru-RU", { timeZone: "Europe/Moscow" });
+
+  await getTransporter().sendMail({
+    from,
+    to: email,
+    subject: `Пароль изменён — ${appName}`,
+    text: `Пароль вашего аккаунта ${email} был успешно изменён ${changedAt} (МСК).\n\nЕсли это были не вы, немедленно свяжитесь с поддержкой.`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+        <h2 style="color: #111;">Пароль изменён</h2>
+        <p style="color: #444;">Пароль аккаунта <strong>${email}</strong> был успешно изменён.</p>
+        <p style="color: #666; font-size: 14px;">Дата и время: ${changedAt} (МСК)</p>
+        <p style="color: #999; font-size: 12px; margin-top: 24px;">Если вы не меняли пароль, немедленно свяжитесь с поддержкой.</p>
+      </div>
+    `,
+  });
+}
+
 export async function verifySmtpConnection() {
   await getTransporter().verify();
 }
