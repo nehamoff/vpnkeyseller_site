@@ -2,7 +2,12 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { pool } from "../db.js";
-import { sendVerificationCode, sendPasswordChangedNotification } from "../email.js";
+import {
+  sendVerificationCode,
+  sendPasswordChangedNotification,
+  sendEmailChangeCode,
+  sendEmailChangedNotification,
+} from "../email.js";
 
 const router = Router();
 
@@ -260,7 +265,8 @@ router.get("/me", async (req, res) => {
     }
 
     const result = await pool.query(
-      "SELECT id, email, email_verified, created_at FROM users WHERE id = $1",
+      `SELECT id, email, email_verified, telegram_id, telegram_username, telegram_first_name, created_at
+       FROM users WHERE id = $1`,
       [userId],
     );
 
@@ -268,9 +274,158 @@ router.get("/me", async (req, res) => {
       return res.status(401).json({ error: "Пользователь не найден" });
     }
 
-    res.json({ user: result.rows[0] });
+    res.json({
+      user: {
+        ...result.rows[0],
+        telegram_id: result.rows[0].telegram_id ? String(result.rows[0].telegram_id) : null,
+      },
+    });
   } catch {
     res.status(401).json({ error: "Недействительный токен" });
+  }
+});
+
+router.post("/change-email/request", async (req, res) => {
+  try {
+    const userId = getAuthUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Требуется авторизация" });
+    }
+
+    const newEmail = normalizeEmail(req.body.newEmail || "");
+    const password = req.body.password || "";
+
+    if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      return res.status(400).json({ error: "Некорректный email" });
+    }
+
+    if (!password) {
+      return res.status(400).json({ error: "Введите текущий пароль" });
+    }
+
+    const result = await pool.query(
+      "SELECT id, email, password_hash FROM users WHERE id = $1",
+      [userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Пользователь не найден" });
+    }
+
+    const user = result.rows[0];
+
+    if (newEmail === user.email) {
+      return res.status(400).json({ error: "Новый email совпадает с текущим" });
+    }
+
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: "Неверный пароль" });
+    }
+
+    const taken = await pool.query(
+      "SELECT id FROM users WHERE email = $1 AND id != $2",
+      [newEmail, userId],
+    );
+    if (taken.rows.length > 0) {
+      return res.status(409).json({ error: "Этот email уже используется" });
+    }
+
+    const code = generateCode();
+    const expiresAt = new Date(Date.now() + CODE_TTL_MINUTES * 60 * 1000);
+
+    await pool.query("DELETE FROM email_change_requests WHERE user_id = $1", [userId]);
+    await pool.query(
+      "INSERT INTO email_change_requests (user_id, new_email, code, expires_at) VALUES ($1, $2, $3, $4)",
+      [userId, newEmail, code, expiresAt],
+    );
+
+    await sendEmailChangeCode(newEmail, code);
+
+    res.json({
+      message: "Код отправлен на новый email",
+      newEmail,
+      expiresInMinutes: CODE_TTL_MINUTES,
+    });
+  } catch (error) {
+    console.error("Change email request error:", error);
+    res.status(500).json({ error: "Не удалось отправить код" });
+  }
+});
+
+router.post("/change-email/verify", async (req, res) => {
+  try {
+    const userId = getAuthUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Требуется авторизация" });
+    }
+
+    const code = String(req.body.code || "").trim();
+
+    if (!code) {
+      return res.status(400).json({ error: "Введите код" });
+    }
+
+    const result = await pool.query(
+      `SELECT id, new_email, code, expires_at
+       FROM email_change_requests
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: "Сначала запросите смену email" });
+    }
+
+    const record = result.rows[0];
+
+    if (new Date(record.expires_at) < new Date()) {
+      await pool.query("DELETE FROM email_change_requests WHERE id = $1", [record.id]);
+      return res.status(400).json({ error: "Код истёк. Запросите новый." });
+    }
+
+    if (record.code !== code) {
+      return res.status(400).json({ error: "Неверный код" });
+    }
+
+    const userResult = await pool.query(
+      "SELECT id, email FROM users WHERE id = $1",
+      [userId],
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({ error: "Пользователь не найден" });
+    }
+
+    const oldEmail = userResult.rows[0].email;
+    const newEmail = record.new_email;
+
+    await pool.query(
+      "UPDATE users SET email = $1, email_verified = true WHERE id = $2",
+      [newEmail, userId],
+    );
+    await pool.query("DELETE FROM email_change_requests WHERE user_id = $1", [userId]);
+
+    try {
+      await sendEmailChangedNotification(oldEmail, newEmail);
+    } catch (emailError) {
+      console.error("Email changed but notification failed:", emailError);
+    }
+
+    const token = signToken({ id: userId, email: newEmail });
+
+    res.json({
+      message: "Email успешно изменён",
+      token,
+      user: { id: userId, email: newEmail },
+    });
+  } catch (error) {
+    console.error("Change email verify error:", error);
+    res.status(500).json({ error: "Не удалось подтвердить смену email" });
   }
 });
 

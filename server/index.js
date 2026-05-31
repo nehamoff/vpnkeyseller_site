@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { initDb, pool } from "./db.js";
 import authRoutes from "./routes/auth.js";
+import telegramRoutes from "./routes/telegram.js";
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
@@ -15,6 +16,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/auth", telegramRoutes);
 
 async function start() {
   if (!process.env.DATABASE_URL) {

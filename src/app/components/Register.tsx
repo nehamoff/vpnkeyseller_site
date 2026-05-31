@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Mail, Lock, Send, ArrowLeft, Loader2 } from "lucide-react";
+import { Mail, Lock, ArrowLeft, Loader2 } from "lucide-react";
 import { Logo } from "./Logo";
+import { TelegramLoginWidget, getUserDisplayName } from "./TelegramLoginWidget";
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSlot,
 } from "./ui/input-otp";
 import { authApi, saveSession, ApiError } from "../../lib/api";
+
+const TELEGRAM_BOT = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "";
 
 type Step = "form" | "verify";
 
@@ -20,6 +23,7 @@ export function Register() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [tgLoading, setTgLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -91,9 +95,18 @@ export function Register() {
     }
   };
 
-  const handleTelegramRegister = () => {
-    localStorage.setItem("vpn_authenticated", "true");
-    navigate("/");
+  const handleTelegramAuth = async (data: Parameters<typeof authApi.telegramAuth>[0]) => {
+    setError("");
+    setTgLoading(true);
+    try {
+      const result = await authApi.telegramAuth(data);
+      saveSession(result.token, getUserDisplayName(result.user));
+      navigate("/");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Ошибка регистрации через Telegram");
+    } finally {
+      setTgLoading(false);
+    }
   };
 
   return (
@@ -187,13 +200,14 @@ export function Register() {
                 </div>
               </div>
 
-              <button
-                onClick={handleTelegramRegister}
-                className="w-full bg-white/80 border border-gray-200 text-gray-800 py-3 rounded-xl hover:shadow-lg hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
-              >
-                <Send className="w-5 h-5" />
-                Регистрация через Telegram
-              </button>
+              <div className="relative min-h-[48px] flex items-center justify-center">
+                {tgLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-xl z-10">
+                    <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
+                  </div>
+                )}
+                <TelegramLoginWidget botUsername={TELEGRAM_BOT} onAuth={handleTelegramAuth} />
+              </div>
             </>
           ) : (
             <>

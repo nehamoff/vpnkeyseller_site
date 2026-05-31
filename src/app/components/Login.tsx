@@ -1,14 +1,18 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Mail, Lock, Send, Loader2 } from "lucide-react";
+import { Mail, Lock, Loader2 } from "lucide-react";
 import { Logo } from "./Logo";
+import { TelegramLoginWidget, getUserDisplayName } from "./TelegramLoginWidget";
 import { authApi, saveSession, ApiError } from "../../lib/api";
+
+const TELEGRAM_BOT = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "";
 
 export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [tgLoading, setTgLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -27,9 +31,18 @@ export function Login() {
     }
   };
 
-  const handleTelegramLogin = () => {
-    localStorage.setItem("vpn_authenticated", "true");
-    navigate("/");
+  const handleTelegramAuth = async (data: Parameters<typeof authApi.telegramAuth>[0]) => {
+    setError("");
+    setTgLoading(true);
+    try {
+      const result = await authApi.telegramAuth(data);
+      saveSession(result.token, getUserDisplayName(result.user));
+      navigate("/");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Ошибка входа через Telegram");
+    } finally {
+      setTgLoading(false);
+    }
   };
 
   return (
@@ -103,13 +116,14 @@ export function Login() {
             </div>
           </div>
 
-          <button
-            onClick={handleTelegramLogin}
-            className="w-full bg-white/80 border border-gray-200 text-gray-800 py-3 rounded-xl hover:shadow-lg hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
-          >
-            <Send className="w-5 h-5" />
-            Войти через Telegram
-          </button>
+          <div className="relative min-h-[48px] flex items-center justify-center">
+            {tgLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-xl z-10">
+                <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
+              </div>
+            )}
+            <TelegramLoginWidget botUsername={TELEGRAM_BOT} onAuth={handleTelegramAuth} />
+          </div>
 
           <p className="text-center mt-6 text-gray-600">
             Нет аккаунта?{" "}
