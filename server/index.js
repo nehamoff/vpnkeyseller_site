@@ -56,6 +56,17 @@ start().catch((error) => {
     console.error("  GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO main;");
     console.error("  GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO main;");
     console.error("");
+  } else if (error.message?.includes("must be owner of")) {
+    console.error("Текущая роль базы данных не является владельцем таблицы 'users'.");
+    console.error("");
+    console.error("Варианты решения:");
+    console.error("  1. Запустите setup-db.sql от суперпользователя, чтобы создать таблицы и выдать права:");
+    console.error("     sudo -u postgres psql -d vpnsite -f setup-db.sql");
+    console.error("  2. Или изменить владельца таблицы на роль, используемую приложением (выполнить от postgres):");
+    console.error("     sudo -u postgres psql -d vpnsite -c \"ALTER TABLE users OWNER TO main;\"");
+    console.error("  3. Или вручную выдать необходимые права для роли, используемой приложением:");
+    console.error("     GRANT ALL PRIVILEGES ON TABLE users TO main;");
+    console.error("");
   } else {
     console.error(error.message || error);
   }

@@ -27,6 +27,19 @@ async function tablesExist() {
   return users_exists && codes_exists;
 }
 
+async function currentUserIsOwner(tableName) {
+  const res = await pool.query(
+    `
+    SELECT (pg_get_userbyid(c.relowner) = current_user) AS is_owner
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relname = $1 AND n.nspname = 'public'
+  `,
+    [tableName]
+  );
+  return res.rows.length > 0 ? res.rows[0].is_owner : false;
+}
+
 export async function initDb() {
   if (!(await tablesExist())) {
     const schema = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8");
@@ -53,10 +66,21 @@ export async function initDb() {
       created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_email_change_requests_user_id ON email_change_requests(user_id);
-
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_id BIGINT UNIQUE;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_username VARCHAR(64);
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_first_name VARCHAR(128);
-    CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
   `);
+
+  const isOwner = await currentUserIsOwner("users");
+  if (isOwner) {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_id BIGINT UNIQUE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_username VARCHAR(64);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_first_name VARCHAR(128);
+      CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
+    `);
+  } else {
+    console.warn("Database role is not the owner of table 'users'; skipping ALTER TABLE / index creation.");
+    console.warn("To add these columns, run the setup script as a superuser or change the table owner.");
+    console.warn('Examples:');
+    console.warn('  sudo -u postgres psql -d <db> -f setup-db.sql');
+    console.warn('  sudo -u postgres psql -d <db> -c "ALTER TABLE users OWNER TO <role>;"');
+  }
 }
