@@ -1,17 +1,30 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Mail, Lock, Send } from "lucide-react";
+import { Mail, Lock, Send, Loader2 } from "lucide-react";
 import { Logo } from "./Logo";
+import { authApi, saveSession, ApiError } from "../../lib/api";
 
 export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem("vpn_authenticated", "true");
-    navigate("/");
+    setError("");
+    setLoading(true);
+
+    try {
+      const result = await authApi.login(email, password);
+      saveSession(result.token, result.user.email);
+      navigate("/");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Ошибка входа");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleTelegramLogin = () => {
@@ -21,21 +34,18 @@ export function Login() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Glass effect background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 -left-20 w-96 h-96 bg-white/30 rounded-full blur-3xl" />
         <div className="absolute bottom-20 -right-20 w-96 h-96 bg-gray-300/20 rounded-full blur-3xl" />
       </div>
 
       <div className="w-full max-w-md relative z-10">
-        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <Logo size="lg" className="mb-4 shadow-2xl" />
           <h1 className="text-3xl font-semibold text-gray-900 mb-2">Кофемания VPN</h1>
           <p className="text-gray-600">Ваш надежный VPN сервис</p>
         </div>
 
-        {/* Login form */}
         <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-2xl border border-gray-200/50 p-8">
           <h2 className="text-2xl font-semibold text-gray-900 mb-6">Вход</h2>
 
@@ -70,10 +80,16 @@ export function Login() {
               </div>
             </div>
 
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 px-4 py-2 rounded-lg">{error}</p>
+            )}
+
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-gray-800 to-gray-900 text-white py-3 rounded-xl hover:shadow-lg hover:scale-[1.02] transition-all"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-gray-800 to-gray-900 text-white py-3 rounded-xl hover:shadow-lg hover:scale-[1.02] transition-all disabled:opacity-60 disabled:hover:scale-100 flex items-center justify-center gap-2"
             >
+              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               Войти
             </button>
           </form>

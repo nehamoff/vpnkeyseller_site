@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router";
 import { Menu, X, User, Key, Info, LogOut } from "lucide-react";
 import { Logo } from "./Logo";
+import { authApi, clearSession } from "../../lib/api";
 
 export function Root() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -10,16 +11,30 @@ export function Root() {
   const location = useLocation();
 
   useEffect(() => {
-    const auth = localStorage.getItem("vpn_authenticated");
-    if (!auth) {
+    const token = localStorage.getItem("vpn_token");
+    const legacyAuth = localStorage.getItem("vpn_authenticated");
+
+    if (!token && !legacyAuth) {
       navigate("/login");
-    } else {
-      setIsAuthenticated(true);
+      return;
     }
+
+    if (!token) {
+      setIsAuthenticated(true);
+      return;
+    }
+
+    authApi
+      .me()
+      .then(() => setIsAuthenticated(true))
+      .catch(() => {
+        clearSession();
+        navigate("/login");
+      });
   }, [navigate]);
 
   const handleLogout = () => {
-    localStorage.removeItem("vpn_authenticated");
+    clearSession();
     navigate("/login");
   };
 
