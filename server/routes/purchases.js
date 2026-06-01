@@ -7,6 +7,8 @@ import {
     mapRemnawaveKey,
 } from "../remnawave-wrapper.js";
 import { createPayment, getPaymentStatus, cancelPayment } from "../yookassa-wrapper.js";
+import { addGbByUsername } from "../remnawave-wrapper.js";
+import { getGbPackage, GB_TOPUP_PACKAGES } from "../gb-packages.js";
 
 const router = Router();
 
@@ -15,9 +17,61 @@ const PAYMENT_AMOUNT_RUB = 1.0;
 
 const PAID_STATUSES = new Set(["succeeded", "waiting_for_capture"]);
 
-const PURCHASE_FIELDS = `id, user_id, package_name, price, days_count, purchased_at, expires_at,
+const PURCHASE_FIELDS = `id, user_id, package_name, price, days_count, gb_amount, purchased_at, expires_at,
   remnawave_inbound_id, remnawave_username, purchase_type,
   yookassa_payment_id, payment_status, status`;
+
+async function fulfillGbTopup(purchaseRow) {
+    const {
+        id,
+        user_id: userId,
+        remnawave_username: username,
+        remnawave_inbound_id: inboundId,
+        yookassa_payment_id: paymentId,
+        gb_amount: gbAmount,
+    } = purchaseRow;
+
+    if (!username || !gbAmount) {
+        throw new Error("Некорректные данные докупки трафика");
+    }
+
+    if (purchaseRow.status === "active" && purchaseRow.purchased_at) {
+        const purchasedAt = new Date(purchaseRow.purchased_at);
+        if (Date.now() - purchasedAt.getTime() < 60000) {
+            return { purchase: purchaseRow, alreadyFulfilled: true };
+        }
+    }
+
+    const addResult = await addGbByUsername(username, Number(gbAmount));
+    if (!addResult.success) {
+        throw new Error(addResult.error || "Не удалось добавить трафик в Remnawave");
+    }
+
+    const paymentStatusResult = paymentId ? await getPaymentStatus(paymentId) : null;
+    const paymentStatus = paymentStatusResult?.status || purchaseRow.payment_status;
+
+    const updateResult = await pool.query(
+        `UPDATE purchases
+       SET payment_status = $1,
+           status = 'active',
+           purchased_at = NOW(),
+           remnawave_inbound_id = COALESCE(remnawave_inbound_id, $2),
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING ${PURCHASE_FIELDS}`,
+        [paymentStatus, addResult.user_uuid || inboundId, id]
+    );
+
+    return {
+        purchase: updateResult.rows[0],
+        inbound: {
+            id: addResult.user_uuid || inboundId,
+            username,
+            addedGb: Number(gbAmount),
+        },
+        alreadyFulfilled: false,
+    };
+}
 
 async function fulfillRenewal(purchaseRow) {
     const {
@@ -83,6 +137,10 @@ async function fulfillRenewal(purchaseRow) {
 }
 
 async function fulfillPurchase(purchaseRow) {
+    if (purchaseRow.purchase_type === "gb_topup" && purchaseRow.remnawave_username) {
+        return fulfillGbTopup(purchaseRow);
+    }
+
     if (purchaseRow.purchase_type === "renewal" && purchaseRow.remnawave_username) {
         return fulfillRenewal(purchaseRow);
     }
@@ -436,9 +494,7 @@ router.post("/webhook/yookassa", async (req, res) => {
             [paymentObject.status, purchase.id]
         );
 
-        const needsFulfill =
-            purchase.status === "awaiting_payment" ||
-            (purchase.purchase_type === "renewal" && purchase.status !== "active");
+        const needsFulfill = purchase.status === "awaiting_payment";
 
         if (needsFulfill) {
             await fulfillPurchase({
@@ -452,6 +508,101 @@ router.post("/webhook/yookassa", async (req, res) => {
     } catch (error) {
         console.error("YooKassa webhook error:", error);
         res.sendStatus(500);
+    }
+});
+
+/** Список пакетов докупки ГБ */
+router.get("/gb-packages", (_req, res) => {
+    res.json({ packages: Object.values(GB_TOPUP_PACKAGES) });
+});
+
+/**
+ * Разовая докупка трафика на ключ.
+ * POST /api/purchases/keys/add-gb
+ */
+router.post("/keys/add-gb", async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ error: "Требуется авторизация" });
+        }
+
+        const { username, user_uuid, package_id } = req.body;
+        const pkg = getGbPackage(package_id);
+
+        if (!username || !pkg) {
+            return res.status(400).json({ error: "Укажите ключ и пакет докупки (gb10, gb30, gb50)" });
+        }
+
+        const userResult = await pool.query("SELECT email FROM users WHERE id = $1", [userId]);
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ error: "Пользователь не найден" });
+        }
+
+        const email = userResult.rows[0].email;
+        const remnaResult = await getAllUsersFromRemnawave(email);
+        const rawKeys = remnaResult.data && Array.isArray(remnaResult.data) ? remnaResult.data : [];
+        const ownsKey = rawKeys.some((k) => k.username === username);
+
+        if (!ownsKey) {
+            return res.status(403).json({ error: "Ключ не принадлежит вашему аккаунту" });
+        }
+
+        const keyUuid = user_uuid || rawKeys.find((k) => k.username === username)?.uuid;
+        const orderId = `gb-${userId}-${Date.now()}`;
+        const returnUrl =
+            (process.env.YOOKASSA_RETURN_URL ||
+                `${(process.env.FRONTEND_URL || "http://127.0.0.1:5173").replace(/\/$/, "")}/my-keys`) +
+            `?payment=return`;
+
+        const paymentResult = await createPayment(orderId, email, pkg.price, returnUrl);
+
+        if (!paymentResult.success) {
+            return res.status(500).json({
+                error: "Не удалось создать платеж",
+                details: paymentResult.error,
+            });
+        }
+
+        const label = `Докупка · ${pkg.label}`;
+
+        const purchaseResult = await pool.query(
+            `INSERT INTO purchases (
+         user_id, package_name, price, days_count, gb_amount,
+         yookassa_payment_id, payment_status, status,
+         purchase_type, remnawave_username, remnawave_inbound_id
+       )
+       VALUES ($1, $2, $3, 0, $4, $5, $6, 'awaiting_payment', 'gb_topup', $7, $8)
+       RETURNING ${PURCHASE_FIELDS}`,
+            [
+                userId,
+                label,
+                pkg.price,
+                pkg.gb,
+                paymentResult.payment_id,
+                paymentResult.status,
+                username,
+                keyUuid || null,
+            ]
+        );
+
+        res.json({
+            message: "Перейдите по ссылке для оплаты докупки трафика",
+            purchase: purchaseResult.rows[0],
+            payment: {
+                id: paymentResult.payment_id,
+                status: paymentResult.status,
+                amount: pkg.price,
+                confirmation_url: paymentResult.confirmation_url,
+            },
+            gb: pkg.gb,
+        });
+    } catch (error) {
+        console.error("Add GB error:", error);
+        res.status(500).json({
+            error: "Ошибка оформления докупки",
+            details: error.message,
+        });
     }
 });
 

@@ -7,6 +7,7 @@ Handles user creation, subscription renewal, and traffic management
 import os
 import sys
 import json
+import calendar
 import requests
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
@@ -64,6 +65,190 @@ class RemnawaveAPI:
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.token}",
         }
+
+    @staticmethod
+    def _parse_dt(value: Optional[str]) -> Optional[datetime]:
+        if not value:
+            return None
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo:
+            dt = dt.astimezone().replace(tzinfo=None)
+        return dt
+
+    def _is_month_rolling_reset_day(self, user: Dict[str, Any]) -> bool:
+        """Совпадает с логикой MONTH_ROLLING: день месяца = день создания ключа."""
+        created = self._parse_dt(user.get("createdAt"))
+        if not created:
+            return False
+
+        now = datetime.now()
+        reset_day = created.day
+        last_day_of_month = calendar.monthrange(now.year, now.month)[1]
+
+        if now.day == reset_day:
+            return True
+        if reset_day > last_day_of_month and now.day == last_day_of_month:
+            return True
+        return False
+
+    def _should_apply_monthly_rollover(self, user: Dict[str, Any]) -> bool:
+        if user.get("trafficLimitStrategy") != "MONTH_ROLLING":
+            return False
+        if not self._is_month_rolling_reset_day(user):
+            return False
+
+        last_reset = self._parse_dt(user.get("lastTrafficResetAt"))
+        now = datetime.now()
+
+        if last_reset is None:
+            return True
+
+        if last_reset.date() < now.date():
+            return True
+
+        used = int(user.get("userTraffic", {}).get("usedTrafficBytes") or 0)
+        if used > 0 and last_reset.date() == now.date():
+            return True
+
+        return False
+
+    @staticmethod
+    def compute_rollover_new_limit(
+        traffic_limit: int,
+        used: int,
+        purchased_bytes: int = 0,
+        base_limit: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Лимит после месячного переноса (MONTH_ROLLING).
+
+        - Без докупок: 25 ГБ + неиспользованный остаток подписки (как раньше).
+        - С докупками: сохраняем общий пул (остаток), без «+25 ГБ» поверх докупки.
+        - Только перенос подписки (лимит > 25 без докупок): новый лимит = остаток.
+        - Докупка исчерпана (остаток 0): снова базовые 25 ГБ.
+        """
+        base = int(base_limit if base_limit is not None else RemnawaveAPI.BASE_LIMIT)
+        traffic_limit = max(0, int(traffic_limit or 0))
+        used = max(0, int(used or 0))
+        purchased_bytes = max(0, int(purchased_bytes or 0))
+
+        leftover = max(0, traffic_limit - used)
+        has_purchased = purchased_bytes > 0
+
+        if leftover == 0:
+            if has_purchased:
+                new_limit = base
+                mode = "purchased_depleted"
+            elif traffic_limit <= base:
+                return {
+                    "new_limit": base,
+                    "leftover": 0,
+                    "mode": "skip",
+                    "should_skip": True,
+                }
+            else:
+                new_limit = base
+                mode = "carry_depleted"
+        elif has_purchased:
+            used_from_purchased = max(0, used - base)
+            purchased_remaining = max(0, purchased_bytes - used_from_purchased)
+            purchased_remaining = min(purchased_remaining, leftover)
+            new_limit = leftover
+            mode = "with_purchase"
+        elif traffic_limit > base:
+            new_limit = leftover
+            mode = "carry_only"
+        else:
+            new_limit = base + leftover
+            mode = "subscription"
+
+        return {
+            "new_limit": new_limit,
+            "leftover": leftover,
+            "mode": mode,
+            "should_skip": False,
+            "purchased_bytes": purchased_bytes,
+            "purchased_remaining": (
+                max(0, min(purchased_bytes, leftover) - max(0, used - base))
+                if has_purchased and leftover > 0
+                else 0
+            ),
+        }
+
+    def apply_monthly_traffic_rollover(
+        self, user: Dict[str, Any], purchased_bytes: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Перед месячным сбросом Remnawave: выставить лимит с учётом докупок и переноса.
+        purchased_bytes — сумма активных gb_topup из БД (в байтах).
+        """
+        username = user.get("username")
+        if not username:
+            return {"success": False, "error": "Username missing"}
+
+        if not self._should_apply_monthly_rollover(user):
+            return {"success": True, "skipped": True, "data": user}
+
+        traffic_limit = int(user.get("trafficLimitBytes") or self.BASE_LIMIT)
+        used = int(user.get("userTraffic", {}).get("usedTrafficBytes") or 0)
+
+        calc = self.compute_rollover_new_limit(
+            traffic_limit, used, purchased_bytes, self.BASE_LIMIT
+        )
+
+        if calc.get("should_skip"):
+            return {"success": True, "skipped": True, "data": user}
+
+        new_limit = int(calc["new_limit"])
+        leftover = int(calc["leftover"])
+
+        if new_limit == traffic_limit and leftover > 0:
+            return {"success": True, "skipped": True, "data": user}
+
+        try:
+            payload = {
+                "username": username,
+                "trafficLimitBytes": new_limit,
+                "trafficLimitStrategy": "MONTH_ROLLING",
+                "hwidDeviceLimit": user.get("hwidDeviceLimit", 3),
+                "activeInternalSquads": [self.PAID_SQUAD_ID],
+            }
+
+            response = requests.patch(
+                f"{self.base_url}/api/users",
+                headers=self._get_headers(),
+                json=payload,
+                timeout=30,
+            )
+            response.raise_for_status()
+
+            refreshed = self.get_user_by_username(username)
+            if refreshed.get("success"):
+                logger.info(
+                    f"✓ Rollover {username} [{calc.get('mode')}]: "
+                    f"limit {traffic_limit} → {new_limit} "
+                    f"({round(leftover / 1073741824, 2)} ГБ остаток, "
+                    f"докупка {round(purchased_bytes / 1073741824, 2)} ГБ)"
+                )
+                return {
+                    "success": True,
+                    "skipped": False,
+                    "data": refreshed["data"],
+                    "leftover_bytes": leftover,
+                    "new_limit": new_limit,
+                    "rollover_mode": calc.get("mode"),
+                }
+
+            return {
+                "success": True,
+                "skipped": False,
+                "data": user,
+                "new_limit": new_limit,
+                "rollover_mode": calc.get("mode"),
+            }
+        except Exception as e:
+            logger.error(f"Rollover failed for {username}: {e}")
+            return {"success": False, "error": str(e), "data": user}
 
     def create_new_user(
         self, email: str, key_number: int = 1, days: int = 30
@@ -163,8 +348,11 @@ class RemnawaveAPI:
             logger.error(f"Failed to get user {email}: {str(e)}")
             return {"success": False, "error": str(e)}
 
-    def get_all_users_by_email(self, email: str) -> Dict[str, Any]:
+    def get_all_users_by_email(
+        self, email: str, purchased_by_username: Optional[Dict[str, int]] = None
+    ) -> Dict[str, Any]:
         """Get ALL users (keys) for an email address"""
+        purchased_by_username = purchased_by_username or {}
         try:
             # Get all users from Remnawave
             response = requests.get(
@@ -185,7 +373,12 @@ class RemnawaveAPI:
             for user in users:
                 username = user.get("username", "")
                 if email_base in username:
-                    matching_users.append(user)
+                    purchased_bytes = int(purchased_by_username.get(username, 0) or 0)
+                    rollover = self.apply_monthly_traffic_rollover(user, purchased_bytes)
+                    if rollover.get("success") and rollover.get("data"):
+                        matching_users.append(rollover["data"])
+                    else:
+                        matching_users.append(user)
 
             if matching_users:
                 logger.info(f"✓ Found {len(matching_users)} keys for {email}")
@@ -301,14 +494,12 @@ class RemnawaveAPI:
 
         new_expire = base_date + timedelta(days=int(days))
 
-        traffic_limit = user.get("trafficLimitBytes", self.BASE_LIMIT)
-        used_traffic = user.get("userTraffic", {}).get("usedTrafficBytes", 0)
-        leftover = max(0, traffic_limit - used_traffic)
-        new_limit = self.BASE_LIMIT + leftover
+        # Продление только продлевает срок; перенос трафика — отдельно в apply_monthly_traffic_rollover.
+        traffic_limit = int(user.get("trafficLimitBytes") or self.BASE_LIMIT)
+        used_traffic = int(user.get("userTraffic", {}).get("usedTrafficBytes") or 0)
 
         payload = {
             "username": username,
-            "trafficLimitBytes": new_limit,
             "expireAt": new_expire.isoformat(),
             "hwidDeviceLimit": user.get("hwidDeviceLimit", 3),
             "trafficLimitStrategy": "MONTH_ROLLING",
@@ -331,7 +522,7 @@ class RemnawaveAPI:
             "username": username,
             "user_uuid": user.get("uuid") or user_response.get("uuid"),
             "expire_at": user_response.get("expireAt") or new_expire.isoformat(),
-            "traffic_limit": new_limit,
+            "traffic_limit": traffic_limit,
             "used_traffic": used_traffic,
         }
 
@@ -413,22 +604,23 @@ class RemnawaveAPI:
             logger.error(f"Failed to get traffic for {email}: {str(e)}")
             return {"success": False, "error": str(e)}
 
-    def give_gb(self, email: str, gb_amount: float) -> Dict[str, Any]:
-        """Add traffic to user"""
+    def give_gb_by_username(self, username: str, gb_amount: float) -> Dict[str, Any]:
+        """Разовое увеличение лимита трафика на ключе (до исчерпания)."""
         try:
-            user_data = self.get_user_by_email(email)
+            user_data = self.get_user_by_username(username)
             if not user_data["success"]:
-                return {"success": False, "error": "User not found"}
+                return {"success": False, "error": f"Ключ {username} не найден"}
 
             user = user_data["data"]
-            bytes_amount = int(gb_amount * 1073741824)
-
-            traffic_limit = user.get("trafficLimitBytes", 0)
+            bytes_amount = int(float(gb_amount) * 1073741824)
+            traffic_limit = int(user.get("trafficLimitBytes") or 0)
             new_limit = traffic_limit + bytes_amount
 
             payload = {
-                "username": user.get("username"),
+                "username": username,
                 "trafficLimitBytes": new_limit,
+                "trafficLimitStrategy": user.get("trafficLimitStrategy", "MONTH_ROLLING"),
+                "hwidDeviceLimit": user.get("hwidDeviceLimit", 3),
                 "activeInternalSquads": [self.PAID_SQUAD_ID],
             }
 
@@ -438,10 +630,32 @@ class RemnawaveAPI:
                 json=payload,
                 timeout=30,
             )
-
             response.raise_for_status()
-            logger.info(f"✓ Added {gb_amount}GB to {email}")
-            return {"success": True, "data": response.json()}
+            result = response.json()
+
+            refreshed = self.get_user_by_username(username)
+            logger.info(f"✓ Added {gb_amount} GB to {username} (limit {new_limit})")
+
+            return {
+                "success": True,
+                "data": result,
+                "username": username,
+                "user_uuid": user.get("uuid"),
+                "traffic_limit": new_limit,
+                "added_bytes": bytes_amount,
+                "user": refreshed.get("data") if refreshed.get("success") else user,
+            }
+        except Exception as e:
+            logger.error(f"Failed to add GB to {username}: {str(e)}")
+            return {"success": False, "error": str(e)}
+
+    def give_gb(self, email: str, gb_amount: float) -> Dict[str, Any]:
+        """Add traffic to user by email (first matching key)."""
+        try:
+            user_data = self.get_user_by_email(email)
+            if not user_data["success"]:
+                return {"success": False, "error": "User not found"}
+            return self.give_gb_by_username(user_data["data"].get("username"), gb_amount)
         except Exception as e:
             logger.error(f"Failed to add GB to {email}: {str(e)}")
             return {"success": False, "error": str(e)}
@@ -457,7 +671,9 @@ def main():
         print("  renew-user <username> [days]        - Renew by Remnawave username")
         print("  traffic <email>                      - Get traffic info")
         print("  traffic-user <username>              - Traffic by username")
-        print("  add-gb <email> <gb_amount>          - Add GB to user")
+        print("  rollover-user <username>             - Apply monthly traffic rollover")
+        print("  add-gb <email> <gb_amount>          - Add GB by email")
+        print("  add-gb-user <username> <gb_amount>  - Add GB by username")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -505,10 +721,26 @@ def main():
             username = sys.argv[2]
             result = api.get_traffic_by_username(username)
 
+        elif command == "rollover-user":
+            username = sys.argv[2]
+            purchased_bytes = int(sys.argv[3]) if len(sys.argv) > 3 else 0
+            user_data = api.get_user_by_username(username)
+            if not user_data["success"]:
+                result = user_data
+            else:
+                result = api.apply_monthly_traffic_rollover(
+                    user_data["data"], purchased_bytes
+                )
+
         elif command == "add-gb":
             email = sys.argv[2]
             gb_amount = float(sys.argv[3])
             result = api.give_gb(email, gb_amount)
+
+        elif command == "add-gb-user":
+            username = sys.argv[2]
+            gb_amount = float(sys.argv[3])
+            result = api.give_gb_by_username(username, gb_amount)
 
         elif command == "get-user":
             email = sys.argv[2]
@@ -520,7 +752,13 @@ def main():
 
         elif command == "get-all-users":
             email = sys.argv[2]
-            users_data = api.get_all_users_by_email(email)
+            purchased_map: Dict[str, int] = {}
+            if len(sys.argv) > 3 and sys.argv[3]:
+                map_path = sys.argv[3]
+                if os.path.isfile(map_path):
+                    with open(map_path, encoding="utf-8") as f:
+                        purchased_map = json.load(f)
+            users_data = api.get_all_users_by_email(email, purchased_map)
             result = users_data
 
         else:

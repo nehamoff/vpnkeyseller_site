@@ -32,7 +32,7 @@ export function PendingPurchasesBanner({
           <h3 className="font-semibold text-amber-950">Ожидает оплаты</h3>
           <p className="text-sm text-amber-900/80 mt-0.5">
             {pending.length === 1
-              ? "Завершите платёж, чтобы получить VPN-ключ"
+              ? "Завершите платёж, чтобы активировать заказ"
               : `У вас ${pending.length} незавершённых заказа`}
           </p>
         </div>
@@ -41,6 +41,10 @@ export function PendingPurchasesBanner({
       <ul className="space-y-3">
         {pending.map((purchase) => {
           const busy = confirmingId === purchase.id || cancellingId === purchase.id;
+          const amountRub =
+            purchase.purchase_type === "gb_topup"
+              ? Number(purchase.price)
+              : PAYMENT_CHARGE_RUB;
           return (
             <li
               key={purchase.id}
@@ -49,7 +53,7 @@ export function PendingPurchasesBanner({
               <div>
                 <p className="font-medium text-gray-900">{purchase.package_name}</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Заказ №{purchase.id} · к оплате {PAYMENT_CHARGE_RUB} ₽
+                  Заказ №{purchase.id} · к оплате {amountRub} ₽
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">

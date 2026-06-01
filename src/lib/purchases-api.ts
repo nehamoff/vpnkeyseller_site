@@ -20,6 +20,7 @@ export interface Purchase {
     yookassa_payment_id?: string | null;
     payment_status?: string | null;
     status: string;
+    gb_amount?: number | null;
 }
 
 export interface RemnaKey {
@@ -113,6 +114,31 @@ export const purchasesAPI = {
     /**
      * Продление существующего ключа (оплата + Remnawave).
      */
+    async buyExtraGb(
+        username: string,
+        userUuid: string | undefined,
+        packageId: string,
+        options: CreatePurchaseOptions = {}
+    ) {
+        const result = await request<PurchaseResponse & { gb?: number }>("/purchases/keys/add-gb", {
+            method: "POST",
+            body: JSON.stringify({
+                username,
+                user_uuid: userUuid,
+                package_id: packageId,
+            }),
+        });
+
+        if (result.payment?.confirmation_url) {
+            this.setPendingPayment(result.purchase.id, result.payment.confirmation_url);
+            if (options.redirect !== false) {
+                window.location.href = result.payment.confirmation_url;
+            }
+        }
+
+        return result;
+    },
+
     async renewKey(
         username: string,
         userUuid: string | undefined,

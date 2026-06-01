@@ -196,7 +196,9 @@ logging.basicConfig(level=logging.DEBUG)
 
 - Base traffic limit: 26843545600 bytes (25 GB)
 - Default HWID device limit: 3
-- Traffic strategy: MONTH_ROLLING (трафик обновляется каждый месяц)
+- Traffic strategy: MONTH_ROLLING (сброс использования раз в месяц от даты создания ключа)
+- Перенос остатка: в день месячного сброса лимит = 25 ГБ + неиспользованный трафик (при загрузке ключей)
+- Продление подписки: только срок (`expireAt`), без добавления ГБ
 
 ## Миграция от старой интеграции
 

@@ -4,9 +4,12 @@
  */
 
 import { spawn } from "child_process";
+import fs from "fs";
+import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
+import { getPurchasedGbBytesByEmail } from "./purchased-gb.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -293,6 +296,35 @@ export async function addGbToUser(email, gbAmount) {
 }
 
 /**
+ * Add GB to a specific key by Remnawave username (one-time top-up).
+ */
+export async function addGbByUsername(username, gbAmount) {
+    try {
+        if (process.env.TEST_MODE === "true") {
+            return {
+                success: true,
+                username,
+                traffic_limit: 26843545600 + gbAmount * 1073741824,
+                data: { mode: "test" },
+            };
+        }
+
+        const result = await executePython(["add-gb-user", username, String(gbAmount)]);
+        return {
+            success: true,
+            data: result.data,
+            username: result.username,
+            user_uuid: result.user_uuid,
+            traffic_limit: result.traffic_limit,
+            user: result.user,
+        };
+    } catch (error) {
+        console.error("Failed to add GB by username:", error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
  * Get user information from Remnawave by email
  * @param {string} email - User email
  * @returns {Promise<{success: boolean, data?: object, error?: string}>}
@@ -319,8 +351,17 @@ export async function getUserFromRemnawave(email) {
  * @returns {Promise<{success: boolean, data?: array, count?: number, error?: string}>}
  */
 export async function getAllUsersFromRemnawave(email) {
+    let purchasedMapPath = null;
     try {
-        const result = await executePython(["get-all-users", email]);
+        const purchasedMap = await getPurchasedGbBytesByEmail(email);
+        purchasedMapPath = path.join(
+            os.tmpdir(),
+            `remna-purchased-${crypto.randomBytes(8).toString("hex")}.json`
+        );
+        fs.writeFileSync(purchasedMapPath, JSON.stringify(purchasedMap), "utf8");
+
+        const args = ["get-all-users", email, purchasedMapPath];
+        const result = await executePython(args);
         return {
             success: result.success,
             data: result.data || [],
@@ -335,6 +376,14 @@ export async function getAllUsersFromRemnawave(email) {
             count: 0,
             error: error.message
         };
+    } finally {
+        if (purchasedMapPath) {
+            try {
+                fs.unlinkSync(purchasedMapPath);
+            } catch {
+                /* ignore */
+            }
+        }
     }
 }
 

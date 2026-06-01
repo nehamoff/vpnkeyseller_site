@@ -1,4 +1,4 @@
-import { Calendar, Check, Copy, RefreshCw } from "lucide-react";
+import { Calendar, Check, Copy, HardDrive, RefreshCw } from "lucide-react";
 import type { Purchase } from "../../../lib/purchases-api";
 
 export interface RemnaKey {
@@ -22,6 +22,7 @@ interface KeysManagementPanelProps {
   formatDate: (date: string) => string;
   isKeyExpired: (expiresAt: string | null) => boolean;
   onRenew?: (key: RemnaKey) => void;
+  onAddGb?: (key: RemnaKey) => void;
   renewDisabled?: boolean;
 }
 
@@ -33,6 +34,7 @@ export function KeysManagementPanel({
   formatDate,
   isKeyExpired,
   onRenew,
+  onAddGb,
   renewDisabled,
 }: KeysManagementPanelProps) {
   const activePurchases = purchases.filter(
@@ -52,7 +54,8 @@ export function KeysManagementPanel({
             Ваши ключи
           </h2>
           <p className="text-gray-600 text-sm mt-1">
-            Управление подписками, трафик и продление
+            Управление подписками и продление. Остаток подписки переносится на следующий месяц;
+            докупленные ГБ сохраняются в лимите, пока не будут израсходованы.
           </p>
         </div>
         <p className="text-sm text-gray-500">
@@ -87,6 +90,7 @@ export function KeysManagementPanel({
                   copiedId={copiedId}
                   onCopy={onCopy}
                   onRenew={onRenew ? () => onRenew(key) : undefined}
+                  onAddGb={onAddGb ? () => onAddGb(key) : undefined}
                   renewDisabled={renewDisabled}
                 />
               );
@@ -156,6 +160,7 @@ function KeyCard({
   onCopy,
   copyLabel = "Ссылка для VPN-клиента",
   onRenew,
+  onAddGb,
   renewDisabled,
 }: {
   title: string;
@@ -168,6 +173,7 @@ function KeyCard({
   onCopy: (text: string, id: string) => void;
   copyLabel?: string;
   onRenew?: () => void;
+  onAddGb?: () => void;
   renewDisabled?: boolean;
 }) {
   return (
@@ -189,17 +195,30 @@ function KeyCard({
             </span>
           )}
         </div>
-        {onRenew && (
-          <button
-            type="button"
-            onClick={onRenew}
-            disabled={renewDisabled}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50 shrink-0"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Продлить
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2 shrink-0">
+          {onAddGb && (
+            <button
+              type="button"
+              onClick={onAddGb}
+              disabled={renewDisabled}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 text-sm font-medium text-blue-800 hover:bg-blue-100 disabled:opacity-50"
+            >
+              <HardDrive className="h-3.5 w-3.5" />
+              Докупить ГБ
+            </button>
+          )}
+          {onRenew && (
+            <button
+              type="button"
+              onClick={onRenew}
+              disabled={renewDisabled}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Продлить
+            </button>
+          )}
+        </div>
       </div>
 
       {expireLabel && (

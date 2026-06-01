@@ -105,6 +105,7 @@ export async function initDb() {
     ALTER TABLE purchases ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
     ALTER TABLE purchases ADD COLUMN IF NOT EXISTS purchase_type VARCHAR(32) DEFAULT 'new';
     ALTER TABLE purchases ADD COLUMN IF NOT EXISTS remnawave_username VARCHAR(255);
+    ALTER TABLE purchases ADD COLUMN IF NOT EXISTS gb_amount INTEGER;
     CREATE INDEX IF NOT EXISTS idx_purchases_user_id ON purchases(user_id);
     CREATE INDEX IF NOT EXISTS idx_purchases_remnawave_inbound_id ON purchases(remnawave_inbound_id);
     CREATE INDEX IF NOT EXISTS idx_purchases_status ON purchases(status);

@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS purchases (
   payment_status VARCHAR(50) DEFAULT 'pending',
   purchase_type VARCHAR(32) DEFAULT 'new',
   remnawave_username VARCHAR(255),
+  gb_amount INTEGER,
   status VARCHAR(50) DEFAULT 'active',
   created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL

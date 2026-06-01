@@ -15,6 +15,7 @@ import { PendingPurchasesBanner } from "./purchase/PendingPurchasesBanner";
 import { KeysManagementPanel } from "./purchase/KeysManagementPanel";
 import { SubscriptionPricing, type PricingPackage } from "./purchase/SubscriptionPricing";
 import { RenewKeyDialog } from "./purchase/RenewKeyDialog";
+import { AddGbDialog } from "./purchase/AddGbDialog";
 
 const PRICING_PACKAGES: PricingPackage[] = [
   {
@@ -71,6 +72,11 @@ export function MyKeys() {
   const [renewDialogOpen, setRenewDialogOpen] = useState(false);
   const [renewLoading, setRenewLoading] = useState(false);
 
+  const [addGbKeyTarget, setAddGbKeyTarget] = useState<RemnaKey | null>(null);
+  const [addGbPackageId, setAddGbPackageId] = useState("gb30");
+  const [addGbDialogOpen, setAddGbDialogOpen] = useState(false);
+  const [addGbLoading, setAddGbLoading] = useState(false);
+
   const hasPendingPayment = useMemo(
     () => purchases.some((p) => p.status === "awaiting_payment"),
     [purchases]
@@ -112,12 +118,20 @@ export function MyKeys() {
         try {
           const confirmed = await purchasesAPI.completePendingPaymentIfNeeded();
           if (confirmed?.purchase) {
-            const isRenewal = confirmed.purchase.purchase_type === "renewal";
-            setSuccess(
-              isRenewal
-                ? `Подписка продлена (${confirmed.purchase.package_name}). Дата обновлена в Remnawave.`
-                : `Ключ «${confirmed.purchase.package_name}» активирован. Скопируйте ссылку подписки ниже.`
-            );
+            const type = confirmed.purchase.purchase_type;
+            if (type === "gb_topup") {
+              setSuccess(
+                `Добавлено ${confirmed.purchase.gb_amount ?? "—"} ГБ к ключу. Трафик увеличен до оплаты исчерпания.`
+              );
+            } else if (type === "renewal") {
+              setSuccess(
+                `Подписка продлена (${confirmed.purchase.package_name}). Дата обновлена в Remnawave.`
+              );
+            } else {
+              setSuccess(
+                `Ключ «${confirmed.purchase.package_name}» активирован. Скопируйте ссылку подписки ниже.`
+              );
+            }
           }
         } catch (confirmErr) {
           setError(
@@ -211,7 +225,16 @@ export function MyKeys() {
       setPurchases((prev) =>
         prev.map((p) => (p.id === purchaseId ? result.purchase : p))
       );
-      setSuccess(`Оплата подтверждена. Ключ «${result.purchase.package_name}» готов.`);
+      const type = result.purchase.purchase_type;
+      if (type === "gb_topup") {
+        setSuccess(
+          `Добавлено ${result.purchase.gb_amount ?? "—"} ГБ. Лимит ключа увеличен.`
+        );
+      } else if (type === "renewal") {
+        setSuccess(`Подписка продлена (${result.purchase.package_name}).`);
+      } else {
+        setSuccess(`Оплата подтверждена. Ключ «${result.purchase.package_name}» готов.`);
+      }
       await refreshRemnaKeys();
     } catch (err) {
       setError(
@@ -325,6 +348,58 @@ export function MyKeys() {
     }
   };
 
+  const openAddGbDialog = (key: RemnaKey) => {
+    setError(null);
+    setAddGbKeyTarget(key);
+    setAddGbPackageId("gb30");
+    setAddGbDialogOpen(true);
+  };
+
+  const handleConfirmAddGb = async () => {
+    if (!addGbKeyTarget?.username) return;
+
+    setAddGbLoading(true);
+    setAddGbDialogOpen(false);
+    setOverlayPackageName(`Докупка трафика`);
+    setOverlay("creating");
+    setError(null);
+    setActivePurchaseId(null);
+
+    try {
+      const result = await purchasesAPI.buyExtraGb(
+        addGbKeyTarget.username,
+        addGbKeyTarget.uuid,
+        addGbPackageId,
+        { redirect: false }
+      );
+
+      setPurchases((prev) => {
+        const without = prev.filter((p) => p.id !== result.purchase.id);
+        return [result.purchase, ...without];
+      });
+
+      setActivePurchaseId(result.purchase.id);
+
+      if (result.payment?.confirmation_url) {
+        setOverlay("redirect");
+        redirectTimerRef.current = setTimeout(() => {
+          window.location.href = result.payment!.confirmation_url!;
+        }, 900);
+        return;
+      }
+
+      setOverlay(null);
+      setSuccess(`Добавлено ${result.gb ?? ""} ГБ к ключу.`);
+      await refreshRemnaKeys();
+    } catch (err) {
+      setOverlay(null);
+      setError(err instanceof Error ? err.message : "Не удалось оформить докупку");
+    } finally {
+      setAddGbLoading(false);
+      setAddGbKeyTarget(null);
+    }
+  };
+
   const handleOverlayCancel = () => {
     if (activePurchaseId != null) {
       void handleCancelPayment(activePurchaseId);
@@ -357,7 +432,7 @@ export function MyKeys() {
     return new Date(expiresAt) < new Date();
   };
 
-  const paymentDisabled = !!overlay || checkoutLoading;
+  const paymentDisabled = !!overlay || checkoutLoading || renewLoading || addGbLoading;
 
   if (loading && !overlay) {
     return (
@@ -396,6 +471,16 @@ export function MyKeys() {
         onSelectPackage={setRenewPackageId}
         loading={renewLoading}
         onConfirm={handleConfirmRenew}
+      />
+
+      <AddGbDialog
+        open={addGbDialogOpen}
+        onOpenChange={setAddGbDialogOpen}
+        keyInfo={addGbKeyTarget}
+        selectedPackageId={addGbPackageId}
+        onSelectPackage={setAddGbPackageId}
+        loading={addGbLoading}
+        onConfirm={handleConfirmAddGb}
       />
 
       {/* Заголовок страницы */}
@@ -452,7 +537,8 @@ export function MyKeys() {
             formatDate={formatDate}
             isKeyExpired={isKeyExpired}
             onRenew={openRenewDialog}
-            renewDisabled={!!overlay || checkoutLoading || renewLoading}
+            onAddGb={openAddGbDialog}
+            renewDisabled={paymentDisabled}
           />
 
           <SubscriptionPricing
