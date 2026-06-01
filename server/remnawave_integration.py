@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import logging
 from dotenv import load_dotenv
+import uuid
 
 # Load environment variables from .env file in the same directory as this script
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -82,9 +83,10 @@ class RemnawaveAPI:
             expire_at = (datetime.now() + timedelta(days=int(days))).isoformat()
             created_at = datetime.now().isoformat()
 
-            # Generate username from email and key number: user@example.com_1
+            # Generate username from email and unique suffix: user_shortUuid
             email_base = email.split("@")[0]
-            username = f"{email_base}_{key_number}"
+            short_uuid = str(uuid.uuid4())[:8]
+            username = f"{email_base}_{short_uuid}"
 
             payload = {
                 "username": username,
@@ -104,7 +106,7 @@ class RemnawaveAPI:
                 f"{self.base_url}/api/users",
                 headers=self._get_headers(),
                 json=payload,
-                timeout=10,
+                timeout=30,
             )
 
             response.raise_for_status()
@@ -140,7 +142,7 @@ class RemnawaveAPI:
                 f"{self.base_url}/api/users",
                 headers=self._get_headers(),
                 params={"size": 100},
-                timeout=10,
+                timeout=30,
             )
 
             response.raise_for_status()
@@ -168,7 +170,7 @@ class RemnawaveAPI:
                 f"{self.base_url}/api/users",
                 headers=self._get_headers(),
                 params={"size": 100},
-                timeout=10,
+                timeout=30,
             )
 
             response.raise_for_status()
@@ -199,7 +201,7 @@ class RemnawaveAPI:
                 f"{self.base_url}/api/users",
                 headers=self._get_headers(),
                 params={"size": 100},
-                timeout=10,
+                timeout=30,
             )
             response.raise_for_status()
             data = response.json().get("response", {})
@@ -228,7 +230,7 @@ class RemnawaveAPI:
                 f"{self.base_url}/api/users",
                 headers=self._get_headers(),
                 json=payload,
-                timeout=10,
+                timeout=30,
             )
 
             response.raise_for_status()
@@ -299,7 +301,7 @@ class RemnawaveAPI:
                 f"{self.base_url}/api/users",
                 headers=self._get_headers(),
                 json=payload,
-                timeout=10,
+                timeout=30,
             )
 
             response.raise_for_status()
@@ -356,7 +358,7 @@ class RemnawaveAPI:
                 f"{self.base_url}/api/users",
                 headers=self._get_headers(),
                 json=payload,
-                timeout=10,
+                timeout=30,
             )
 
             response.raise_for_status()

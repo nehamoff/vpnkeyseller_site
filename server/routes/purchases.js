@@ -131,10 +131,11 @@ router.get("/remnawave/keys", async (req, res) => {
             });
         }
 
-        // Return all user keys from Remnawave
+        // Return all user keys from Remnawave as array
+        const keys = remnaResult.data ? [remnaResult.data] : [];
         res.json({
             success: true,
-            keys: remnaResult.data || []
+            keys: keys
         });
     } catch (error) {
         console.error("Fetch Remnawave keys error:", error);
