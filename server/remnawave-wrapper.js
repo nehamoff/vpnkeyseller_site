@@ -218,6 +218,31 @@ export async function getUserFromRemnawave(email) {
 }
 
 /**
+ * Get ALL user keys (subscriptions) from Remnawave by email
+ * @param {string} email - User email
+ * @returns {Promise<{success: boolean, data?: array, count?: number, error?: string}>}
+ */
+export async function getAllUsersFromRemnawave(email) {
+    try {
+        const result = await executePython(["get-all-users", email]);
+        return {
+            success: result.success,
+            data: result.data || [],
+            count: result.count || 0,
+            error: result.error
+        };
+    } catch (error) {
+        console.error("Failed to get all users from Remnawave:", error.message);
+        return {
+            success: false,
+            data: [],
+            count: 0,
+            error: error.message
+        };
+    }
+}
+
+/**
  * Legacy function for compatibility - creates inbound key
  * Maps to createVpnUser
  * @param {string} email - User email

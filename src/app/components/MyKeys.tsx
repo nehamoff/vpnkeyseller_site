@@ -114,6 +114,16 @@ export function MyKeys() {
       setPurchases([result.purchase, ...purchases]);
       setSuccess(`✓ Ключ "${pkg.name}" успешно создан! Используйте его для подключения.`);
 
+      // Reload Remnawave keys to show the new one
+      try {
+        const remnaResponse = await purchasesAPI.getRemnaKeys();
+        if (remnaResponse.success && remnaResponse.keys) {
+          setRemnaKeys(Array.isArray(remnaResponse.keys) ? remnaResponse.keys : []);
+        }
+      } catch (remnaError) {
+        console.error("[MyKeys] Failed to reload Remnawave keys:", remnaError);
+      }
+
       // Clear success message after 5 seconds
       setTimeout(() => setSuccess(null), 5000);
     } catch (err) {

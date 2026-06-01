@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db.js";
-import { createVpnUser, getUserFromRemnawave } from "../remnawave-wrapper.js";
+import { createVpnUser, getUserFromRemnawave, getAllUsersFromRemnawave } from "../remnawave-wrapper.js";
 
 const router = Router();
 
@@ -121,18 +121,21 @@ router.get("/remnawave/keys", async (req, res) => {
 
         const email = userResult.rows[0].email;
 
-        // Get user data from Remnawave
-        const remnaResult = await getUserFromRemnawave(email);
+        // Get ALL user keys from Remnawave
+        const remnaResult = await getAllUsersFromRemnawave(email);
 
         if (!remnaResult.success) {
-            return res.status(404).json({
-                error: "Ключи не найдены в Remnawave",
-                details: remnaResult.error
+            console.log(`[Purchases] No keys found for ${email}`);
+            return res.json({
+                success: true,
+                keys: []
             });
         }
 
         // Return all user keys from Remnawave as array
-        const keys = remnaResult.data ? [remnaResult.data] : [];
+        const keys = remnaResult.data && Array.isArray(remnaResult.data) ? remnaResult.data : [];
+        console.log(`[Purchases] Found ${keys.length} keys for ${email}`);
+
         res.json({
             success: true,
             keys: keys

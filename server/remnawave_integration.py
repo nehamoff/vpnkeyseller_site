@@ -163,6 +163,49 @@ class RemnawaveAPI:
             logger.error(f"Failed to get user {email}: {str(e)}")
             return {"success": False, "error": str(e)}
 
+    def get_all_users_by_email(self, email: str) -> Dict[str, Any]:
+        """Get ALL users (keys) for an email address"""
+        try:
+            # Get all users from Remnawave
+            response = requests.get(
+                f"{self.base_url}/api/users",
+                headers=self._get_headers(),
+                params={"size": 1000},
+                timeout=30,
+            )
+
+            response.raise_for_status()
+            data = response.json().get("response", {})
+            users = data.get("users", [])
+
+            # Find all users with this email in username
+            email_base = email.split("@")[0]
+            matching_users = []
+
+            for user in users:
+                username = user.get("username", "")
+                if email_base in username:
+                    matching_users.append(user)
+
+            if matching_users:
+                logger.info(f"✓ Found {len(matching_users)} keys for {email}")
+                return {
+                    "success": True,
+                    "data": matching_users,
+                    "count": len(matching_users),
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "No keys found",
+                    "data": [],
+                    "count": 0,
+                }
+
+        except Exception as e:
+            logger.error(f"Failed to get all users for {email}: {str(e)}")
+            return {"success": False, "error": str(e), "data": [], "count": 0}
+
     def get_user_by_username(self, username: str) -> Dict[str, Any]:
         """Get user information by exact username"""
         try:
@@ -428,6 +471,12 @@ def main():
                 result = {"success": True, "data": user_data["data"]}
             else:
                 result = user_data
+
+        elif command == "get-all-users":
+            email = sys.argv[2]
+            users_data = api.get_all_users_by_email(email)
+            result = users_data
+
         else:
             print(f"Unknown command: {command}")
             sys.exit(1)
