@@ -83,4 +83,29 @@ export async function initDb() {
     console.warn('  sudo -u postgres psql -d <db> -f setup-db.sql');
     console.warn('  sudo -u postgres psql -d <db> -c "ALTER TABLE users OWNER TO <role>;"');
   }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS purchases (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      package_name VARCHAR(255) NOT NULL,
+      price DECIMAL(10, 2),
+      days_count INTEGER DEFAULT 30,
+      purchased_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+      expires_at TIMESTAMPTZ,
+      remnawave_inbound_id VARCHAR(255),
+      yookassa_payment_id VARCHAR(255),
+      payment_status VARCHAR(50) DEFAULT 'pending',
+      status VARCHAR(50) DEFAULT 'active',
+      created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+    );
+    ALTER TABLE purchases ADD COLUMN IF NOT EXISTS yookassa_payment_id VARCHAR(255);
+    ALTER TABLE purchases ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'pending';
+    ALTER TABLE purchases ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_purchases_user_id ON purchases(user_id);
+    CREATE INDEX IF NOT EXISTS idx_purchases_remnawave_inbound_id ON purchases(remnawave_inbound_id);
+    CREATE INDEX IF NOT EXISTS idx_purchases_status ON purchases(status);
+    CREATE INDEX IF NOT EXISTS idx_purchases_payment_id ON purchases(yookassa_payment_id);
+  `);
 }

@@ -56,6 +56,10 @@ export function BuyVPNKey() {
             const result = await purchasesAPI.create(pkg.name, pkg.price, pkg.days);
             console.log("[BuyVPNKey] Purchase result:", result);
 
+            if (result.payment?.confirmation_url) {
+                return;
+            }
+
             setPurchaseData(result);
             setSuccess(true);
             setSelectedPackage(""); // Сбрасываем выбор после успешной покупки
@@ -165,10 +169,10 @@ export function BuyVPNKey() {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
                 <h3 className="font-semibold text-blue-900 mb-3">Как это работает?</h3>
                 <ol className="space-y-2 text-sm text-blue-800">
-                    <li>1. Выберите тариф и нажмите "Купить"</li>
-                    <li>2. Автоматически создается VPN ключ в панели Remnawave</li>
-                    <li>3. Ключ привязывается к вашему аккаунту на нужный период</li>
-                    <li>4. Ключ готов к использованию в VPN клиенте</li>
+                    <li>1. Выберите тариф и нажмите «Купить»</li>
+                    <li>2. Оплатите заказ на странице ЮKassa (сейчас тестовая сумма 1 ₽)</li>
+                    <li>3. После оплаты создаётся VPN ключ в Remnawave</li>
+                    <li>4. Ключ готов к использованию в VPN-клиенте</li>
                 </ol>
             </div>
         </div>

@@ -73,6 +73,21 @@ export function MyKeys() {
     setLoading(true);
     setError(null);
     try {
+      try {
+        const confirmed = await purchasesAPI.completePendingPaymentIfNeeded();
+        if (confirmed?.purchase) {
+          setSuccess(
+            `✓ Оплата прошла успешно. Ключ «${confirmed.purchase.package_name}» активирован.`
+          );
+        }
+      } catch (confirmErr) {
+        setError(
+          confirmErr instanceof Error
+            ? confirmErr.message
+            : "Оплата получена, но активация ключа не удалась. Обновите страницу или обратитесь в поддержку."
+        );
+      }
+
       const userResponse = await authApi.me();
       setUser(userResponse.user);
 
@@ -110,9 +125,12 @@ export function MyKeys() {
       const result = await purchasesAPI.create(pkg.name, pkg.price, pkg.daysCount);
       console.log("[MyKeys] Purchase successful:", result);
 
-      // Add the new purchase to the list
+      if (result.payment?.confirmation_url) {
+        return;
+      }
+
       setPurchases([result.purchase, ...purchases]);
-      setSuccess(`✓ Ключ "${pkg.name}" успешно создан! Используйте его для подключения.`);
+      setSuccess(`✓ Ключ «${pkg.name}» успешно создан! Используйте его для подключения.`);
 
       // Reload Remnawave keys to show the new one
       try {

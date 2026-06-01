@@ -13,16 +13,31 @@ export interface Purchase {
     price: string;
     days_count: number;
     purchased_at: string;
-    expires_at: string;
-    remnawave_inbound_id: string;
+    expires_at: string | null;
+    remnawave_inbound_id: string | null;
+    yookassa_payment_id?: string | null;
+    payment_status?: string | null;
     status: string;
+}
+
+const PENDING_PURCHASE_KEY = "vpn_pending_purchase_id";
+
+export interface PurchasePaymentInfo {
+    id: string;
+    status: string;
+    amount?: number;
+    paid?: boolean;
+    confirmation_url?: string;
 }
 
 export interface PurchaseResponse {
     message: string;
     purchase: Purchase;
-    inbound: {
+    payment?: PurchasePaymentInfo;
+    inbound?: {
         id: string;
+        username?: string;
+        keyNumber?: number;
         expiresAt: string;
     };
 }
@@ -73,10 +88,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const purchasesAPI = {
     /**
-     * Создает новую покупку и VPN ключ
+     * Создаёт платёж YooKassa (1 ₽) и покупку; при наличии confirmation_url перенаправляет на оплату.
      */
     async create(packageName: string, price?: number, daysCount: number = 30) {
-        return request<PurchaseResponse>("/purchases", {
+        const result = await request<PurchaseResponse>("/purchases", {
             method: "POST",
             body: JSON.stringify({
                 package_name: packageName,
@@ -84,6 +99,60 @@ export const purchasesAPI = {
                 days_count: daysCount,
             }),
         });
+
+        if (result.payment?.confirmation_url) {
+            localStorage.setItem(PENDING_PURCHASE_KEY, String(result.purchase.id));
+            window.location.href = result.payment.confirmation_url;
+        }
+
+        return result;
+    },
+
+    /**
+     * После возврата с YooKassa — проверяет оплату и выдаёт VPN ключ.
+     */
+    async confirm(purchaseId: number) {
+        return request<PurchaseResponse>(`/purchases/${purchaseId}/confirm`, {
+            method: "POST",
+        });
+    },
+
+    getPendingPurchaseId(): number | null {
+        const raw = localStorage.getItem(PENDING_PURCHASE_KEY);
+        if (!raw) return null;
+        const id = Number(raw);
+        return Number.isFinite(id) ? id : null;
+    },
+
+    clearPendingPurchaseId() {
+        localStorage.removeItem(PENDING_PURCHASE_KEY);
+    },
+
+    /**
+     * Обработка return_url (?payment=return): подтверждение ожидающей покупки.
+     */
+    async completePendingPaymentIfNeeded(): Promise<PurchaseResponse | null> {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("payment") !== "return") {
+            return null;
+        }
+
+        const pendingId = this.getPendingPurchaseId();
+        if (!pendingId) {
+            return null;
+        }
+
+        try {
+            const result = await this.confirm(pendingId);
+            this.clearPendingPurchaseId();
+            const url = new URL(window.location.href);
+            url.searchParams.delete("payment");
+            window.history.replaceState({}, "", url.pathname + url.search);
+            return result;
+        } catch (err) {
+            console.error("[Purchases] Payment confirm failed:", err);
+            throw err;
+        }
     },
 
     /**

@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS purchases (
   purchased_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
   expires_at TIMESTAMPTZ,
   remnawave_inbound_id VARCHAR(255),
+  yookassa_payment_id VARCHAR(255),
+  payment_status VARCHAR(50) DEFAULT 'pending',
   status VARCHAR(50) DEFAULT 'active',
   created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
@@ -56,3 +58,4 @@ CREATE TABLE IF NOT EXISTS purchases (
 CREATE INDEX IF NOT EXISTS idx_purchases_user_id ON purchases(user_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_remnawave_inbound_id ON purchases(remnawave_inbound_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_status ON purchases(status);
+CREATE INDEX IF NOT EXISTS idx_purchases_payment_id ON purchases(yookassa_payment_id);
