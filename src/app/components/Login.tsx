@@ -13,6 +13,8 @@ export function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [tgLoading, setTgLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -21,10 +23,14 @@ export function Login() {
     setLoading(true);
 
     try {
+      console.log("Login attempt:", { email, password });
       const result = await authApi.login(email, password);
+      console.log("Login result:", result);
       saveSession(result.token, result.user.email);
+      console.log("Session saved. Token in localStorage:", localStorage.getItem("vpn_token")?.substring(0, 50));
       navigate("/");
     } catch (err) {
+      console.error("Login error:", err);
       setError(err instanceof ApiError ? err.message : "Ошибка входа");
     } finally {
       setLoading(false);
@@ -42,6 +48,27 @@ export function Login() {
       setError(err instanceof ApiError ? err.message : "Ошибка входа через Telegram");
     } finally {
       setTgLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (!email) {
+      setError("Введите email для отправки кода подтверждения");
+      return;
+    }
+
+    setResendLoading(true);
+    setError("");
+    setResendSuccess(false);
+
+    try {
+      await authApi.resendCode(email);
+      setResendSuccess(true);
+      setTimeout(() => setResendSuccess(false), 5000);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось отправить код");
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -97,6 +124,12 @@ export function Login() {
               <p className="text-sm text-red-600 bg-red-50 px-4 py-2 rounded-lg">{error}</p>
             )}
 
+            {resendSuccess && (
+              <p className="text-sm text-green-600 bg-green-50 px-4 py-2 rounded-lg">
+                Код подтверждения отправлен на ваш email
+              </p>
+            )}
+
             <button
               type="submit"
               disabled={loading}
@@ -104,6 +137,16 @@ export function Login() {
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               Войти
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResendCode}
+              disabled={resendLoading}
+              className="w-full mt-2 bg-gray-200 text-gray-800 py-3 rounded-xl hover:bg-gray-300 transition-all disabled:opacity-60 flex items-center justify-center gap-2 text-sm"
+            >
+              {resendLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+              Отправить код подтверждения
             </button>
           </form>
 

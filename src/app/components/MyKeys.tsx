@@ -1,278 +1,470 @@
-import { useState } from "react";
-import { Key, ChevronDown, ChevronUp, Smartphone, HardDrive, Plus, Clock } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  Loader2,
+  ShoppingCart,
+  AlertCircle,
+  Copy,
+  Calendar,
+  Mail,
+  Send,
+  Check
+} from "lucide-react";
+import { authApi, type UserProfile } from "../../lib/api";
+import { purchasesAPI, type Purchase } from "../../lib/purchases-api";
 
-interface VPNKey {
+interface PricingPackage {
   id: string;
   name: string;
-  plan: string;
-  expiresAt: string;
-  devices: number;
-  maxDevices: number;
-  trafficUsed: number;
-  trafficTotal: number;
-  key: string;
+  price: number;
+  daysCount: number;
+  period: string;
+  periodLabel: string;
+  features: string[];
+  popular?: boolean;
 }
 
-const mockKeys: VPNKey[] = [
+const PRICING_PACKAGES: PricingPackage[] = [
   {
-    id: "1",
-    name: "Мой основной ключ",
-    plan: "Стандарт",
-    expiresAt: "2026-06-30",
-    devices: 2,
-    maxDevices: 3,
-    trafficUsed: 45.5,
-    trafficTotal: 100,
-    key: "vpn://connect/abc123def456",
-  },
-];
-
-const plans = [
-  {
-    name: "Базовый",
-    price: "299 ₽",
+    id: "month",
+    name: "1 месяц",
+    price: 149,
+    daysCount: 30,
     period: "месяц",
-    devices: 1,
-    traffic: "50 ГБ",
-    features: ["1 устройство", "50 ГБ трафика", "Базовая поддержка"],
+    periodLabel: "месяц",
+    features: ["Безлимитная скорость", "Все серверы доступны", "Круглосуточная поддержка"],
   },
   {
-    name: "Стандарт",
-    price: "599 ₽",
-    period: "месяц",
-    devices: 3,
-    traffic: "100 ГБ",
-    features: ["3 устройства", "100 ГБ трафика", "Приоритетная поддержка", "Безлимитная скорость"],
+    id: "three-months",
+    name: "3 месяца",
+    price: 399,
+    daysCount: 90,
+    period: "квартал",
+    periodLabel: "за 3 месяца",
+    features: ["Безлимитная скорость", "Все серверы доступны", "Круглосуточная поддержка", "Экономия 11%"],
     popular: true,
   },
   {
-    name: "Премиум",
-    price: "999 ₽",
-    period: "месяц",
-    devices: 5,
-    traffic: "Безлимит",
-    features: [
-      "5 устройств",
-      "Безлимитный трафик",
-      "VIP поддержка 24/7",
-      "Максимальная скорость",
-      "Доступ к эксклюзивным серверам",
-    ],
+    id: "year",
+    name: "12 месяцев",
+    price: 899,
+    daysCount: 365,
+    period: "год",
+    periodLabel: "за год",
+    features: ["Безлимитная скорость", "Все серверы доступны", "Круглосуточная поддержка", "Экономия 50%"],
   },
 ];
 
 export function MyKeys() {
-  const [keys, setKeys] = useState<VPNKey[]>(mockKeys);
-  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
-  const [showPlans, setShowPlans] = useState(keys.length === 0);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [remnaKeys, setRemnaKeys] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [purchasing, setPurchasing] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const toggleKeyExpand = (id: string) => {
-    const newExpanded = new Set(expandedKeys);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
+  // Load user profile and purchases on component mount
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const userResponse = await authApi.me();
+      setUser(userResponse.user);
+
+      const purchasesResponse = await purchasesAPI.list();
+      setPurchases(purchasesResponse.purchases);
+
+      // Get keys from Remnawave
+      try {
+        const remnaResponse = await purchasesAPI.getRemnaKeys();
+        if (remnaResponse.success && remnaResponse.keys) {
+          console.log("[MyKeys] Remnawave keys:", remnaResponse.keys);
+          setRemnaKeys(Array.isArray(remnaResponse.keys) ? remnaResponse.keys : []);
+        }
+      } catch (remnaError) {
+        console.error("[MyKeys] Failed to fetch Remnawave keys:", remnaError);
+        // Don't fail completely if Remnawave fetch fails
+      }
+    } catch (err) {
+      console.error("Failed to load data:", err);
+      setError(
+        err instanceof Error ? err.message : "Ошибка при загрузке данных"
+      );
+    } finally {
+      setLoading(false);
     }
-    setExpandedKeys(newExpanded);
   };
 
-  const handleBuyPlan = (planName: string) => {
-    alert(`Покупка плана: ${planName}`);
+  const handlePurchase = async (pkg: PricingPackage) => {
+    setPurchasing(pkg.id);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      console.log(`[MyKeys] Purchasing ${pkg.name}...`);
+      const result = await purchasesAPI.create(pkg.name, pkg.price, pkg.daysCount);
+      console.log("[MyKeys] Purchase successful:", result);
+
+      // Add the new purchase to the list
+      setPurchases([result.purchase, ...purchases]);
+      setSuccess(`✓ Ключ "${pkg.name}" успешно создан! Используйте его для подключения.`);
+
+      // Clear success message after 5 seconds
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err) {
+      console.error("[MyKeys] Purchase error:", err);
+      setError(
+        err instanceof Error ? err.message : "Ошибка при создании ключа"
+      );
+    } finally {
+      setPurchasing(null);
+    }
   };
 
-  if (showPlans || keys.length === 0) {
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("ru-RU", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  };
+
+  const isKeyExpired = (expiresAt: string) => {
+    return new Date(expiresAt) < new Date();
+  };
+
+  if (loading) {
     return (
-      <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-semibold text-gray-900 mb-4">
-            {keys.length === 0 ? "У вас нет активных ключей" : "Выберите тариф"}
-          </h2>
-          <p className="text-gray-600">Выберите подходящий тариф для вашего VPN</p>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-8">
+      {/* User Info Card */}
+      {user && (
+        <div className="bg-gradient-to-r from-gray-100/40 to-gray-50/40 backdrop-blur-xl rounded-2xl border border-gray-200/50 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Ваши данные</h3>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="flex items-center gap-3">
+              <Mail className="w-5 h-5 text-gray-600 flex-shrink-0" />
+              <div>
+                <p className="text-sm text-gray-600">Email</p>
+                <p className="font-medium text-gray-900">{user.email}</p>
+              </div>
+            </div>
+            {user.telegram_username && (
+              <div className="flex items-center gap-3">
+                <Send className="w-5 h-5 text-gray-600 flex-shrink-0" />
+                <div>
+                  <p className="text-sm text-gray-600">Telegram</p>
+                  <p className="font-medium text-gray-900">@{user.telegram_username}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Error Alert */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-semibold text-red-900">Ошибка</h3>
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Success Alert */}
+      {success && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex gap-3">
+          <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-semibold text-green-900">Успешно!</h3>
+            <p className="text-sm text-green-700">{success}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Pricing Plans Section */}
+      <div>
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Выберите подписку</h2>
+          <p className="text-gray-600">Купите ключ для доступа к VPN</p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
-          {plans.map((plan) => (
+        <div className="grid md:grid-cols-3 gap-6">
+          {PRICING_PACKAGES.map((pkg) => (
             <div
-              key={plan.name}
-              className={`bg-white/60 backdrop-blur-xl rounded-3xl shadow-xl border p-8 relative transition-all hover:scale-105 ${
-                plan.popular
-                  ? "border-gray-900 ring-2 ring-gray-900/20"
-                  : "border-gray-200/50"
-              }`}
+              key={pkg.id}
+              className={`bg-white/60 backdrop-blur-xl rounded-2xl border p-6 relative transition-all hover:shadow-lg ${pkg.popular
+                ? "border-gray-900 ring-2 ring-gray-900/10 md:scale-105"
+                : "border-gray-200/50"
+                }`}
             >
-              {plan.popular && (
+              {pkg.popular && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-gray-800 to-gray-900 text-white px-4 py-1 rounded-full text-sm font-semibold">
                   Популярный
                 </div>
               )}
 
               <div className="text-center mb-6">
-                <h3 className="text-2xl font-semibold text-gray-900 mb-2">{plan.name}</h3>
-                <div className="flex items-baseline justify-center gap-1">
-                  <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
-                  <span className="text-gray-600">/ {plan.period}</span>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">{pkg.name}</h3>
+                <div className="flex items-baseline justify-center gap-2">
+                  <span className="text-4xl font-bold text-gray-900">{pkg.price}</span>
+                  <span className="text-gray-600">₽</span>
                 </div>
+                <p className="text-sm text-gray-500 mt-2">{pkg.periodLabel}</p>
               </div>
 
               <ul className="space-y-3 mb-8">
-                {plan.features.map((feature) => (
+                {pkg.features.map((feature) => (
                   <li key={feature} className="flex items-center gap-2 text-gray-700">
                     <div className="w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
-                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      <svg
+                        className="w-3 h-3 text-white"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={3}
+                          d="M5 13l4 4L19 7"
+                        />
                       </svg>
                     </div>
-                    <span>{feature}</span>
+                    <span className="text-sm">{feature}</span>
                   </li>
                 ))}
               </ul>
 
               <button
-                onClick={() => handleBuyPlan(plan.name)}
-                className={`w-full py-3 rounded-xl transition-all ${
-                  plan.popular
+                onClick={() => handlePurchase(pkg)}
+                disabled={purchasing === pkg.id}
+                className={`w-full py-3 rounded-lg transition-all font-semibold flex items-center justify-center gap-2 ${purchasing === pkg.id
+                  ? "bg-gray-200 text-gray-600 cursor-not-allowed"
+                  : pkg.popular
                     ? "bg-gradient-to-r from-gray-800 to-gray-900 text-white hover:shadow-lg"
-                    : "bg-white/80 border border-gray-200 text-gray-900 hover:shadow-lg"
-                }`}
+                    : "bg-white/80 border border-gray-300 text-gray-900 hover:bg-gray-100"
+                  }`}
               >
-                Купить
+                {purchasing === pkg.id ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Создание...
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart className="w-4 h-4" />
+                    Купить
+                  </>
+                )}
               </button>
             </div>
           ))}
         </div>
-
-        {keys.length > 0 && (
-          <div className="text-center">
-            <button
-              onClick={() => setShowPlans(false)}
-              className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:shadow-lg transition-all"
-            >
-              Вернуться к моим ключам
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-semibold text-gray-900">Мои VPN ключи</h2>
-        <button
-          onClick={() => setShowPlans(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-xl hover:shadow-lg transition-all"
-        >
-          <Plus className="w-5 h-5" />
-          Купить новый ключ
-        </button>
       </div>
 
-      <div className="space-y-4">
-        {keys.map((key) => {
-          const isExpanded = expandedKeys.has(key.id);
-          const trafficPercent = (key.trafficUsed / key.trafficTotal) * 100;
-
-          return (
-            <div
-              key={key.id}
-              className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200/50 overflow-hidden"
-            >
-              <button
-                onClick={() => toggleKeyExpand(key.id)}
-                className="w-full p-6 flex items-center justify-between hover:bg-white/40 transition-all"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl flex items-center justify-center">
-                    <Key className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="font-semibold text-gray-900">{key.name}</h3>
-                    <p className="text-sm text-gray-600">Тариф: {key.plan}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-6">
-                  <div className="text-right">
-                    <p className="text-sm text-gray-600">Истекает</p>
-                    <p className="font-semibold text-gray-900">{key.expiresAt}</p>
-                  </div>
-                  {isExpanded ? (
-                    <ChevronUp className="w-6 h-6 text-gray-400" />
-                  ) : (
-                    <ChevronDown className="w-6 h-6 text-gray-400" />
-                  )}
-                </div>
-              </button>
-
-              {isExpanded && (
-                <div className="px-6 pb-6 space-y-6 border-t border-gray-200/50 pt-6">
-                  <div className="bg-white/80 rounded-xl p-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Smartphone className="w-5 h-5 text-gray-600" />
-                        <span className="text-gray-700">Устройства</span>
+      {/* Active Keys Section - From Remnawave */}
+      {remnaKeys.length > 0 && (
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Ваши активные ключи</h2>
+          <div className="space-y-4">
+            {remnaKeys.map((key: any) => {
+              const expired = key.expireAt && new Date(key.expireAt) < new Date();
+              return (
+                <div
+                  key={key.uuid || key.id}
+                  className={`bg-white/60 backdrop-blur-xl rounded-xl border p-6 transition-all ${expired
+                    ? "border-red-200/50 bg-red-50/30"
+                    : "border-gray-200/50"
+                    }`}
+                >
+                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {key.username}
+                        </h3>
+                        {expired && (
+                          <span className="text-xs font-semibold bg-red-100 text-red-700 px-2 py-1 rounded-full">
+                            Истёк
+                          </span>
+                        )}
+                        {!expired && (
+                          <span className="text-xs font-semibold bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                            Активен
+                          </span>
+                        )}
                       </div>
-                      <span className="font-semibold text-gray-900">
-                        {key.devices} / {key.maxDevices}
-                      </span>
-                    </div>
 
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <HardDrive className="w-5 h-5 text-gray-600" />
-                          <span className="text-gray-700">Трафик</span>
+                      <div className="space-y-2 text-sm text-gray-600 mb-3">
+                        {key.email && (
+                          <div>Email: <span className="font-medium text-gray-900">{key.email}</span></div>
+                        )}
+                        {key.expireAt && (
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4" />
+                            <span>до {formatDate(key.expireAt)}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Subscription URL */}
+                      {key.subscriptionUrl && (
+                        <div className="mt-3 p-3 bg-gray-100/60 rounded-lg">
+                          <p className="text-xs text-gray-600 mb-1">Ссылка подписки:</p>
+                          <div className="flex items-center gap-2">
+                            <code className="text-xs font-mono text-gray-900 flex-1 break-all">
+                              {key.subscriptionUrl}
+                            </code>
+                            <button
+                              onClick={() =>
+                                copyToClipboard(
+                                  key.subscriptionUrl,
+                                  `copy-${key.uuid || key.id}`
+                                )
+                              }
+                              className="p-2 hover:bg-gray-200 rounded-lg transition-colors flex-shrink-0"
+                              title="Скопировать ссылку"
+                            >
+                              {copiedId === `copy-${key.uuid || key.id}` ? (
+                                <Check className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-gray-600" />
+                              )}
+                            </button>
+                          </div>
                         </div>
-                        <span className="font-semibold text-gray-900">
-                          {key.trafficUsed} / {key.trafficTotal} ГБ
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="bg-gradient-to-r from-gray-700 to-gray-900 h-full rounded-full transition-all"
-                          style={{ width: `${trafficPercent}%` }}
-                        />
-                      </div>
+                      )}
                     </div>
-
-                    <div>
-                      <label className="block text-sm text-gray-700 mb-2">Ключ подключения</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={key.key}
-                          readOnly
-                          className="flex-1 px-4 py-2 bg-gray-100 border border-gray-200 rounded-lg font-mono text-sm"
-                        />
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(key.key);
-                            alert("Ключ скопирован!");
-                          }}
-                          className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:shadow-lg transition-all"
-                        >
-                          Копировать
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-gray-800 to-gray-900 text-white rounded-xl hover:shadow-lg transition-all">
-                      <Clock className="w-5 h-5" />
-                      Продлить
-                    </button>
-                    <button className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/80 border border-gray-200 text-gray-900 rounded-xl hover:shadow-lg transition-all">
-                      <Plus className="w-5 h-5" />
-                      Докупить трафик
-                    </button>
                   </div>
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {purchases.length === 0 && remnaKeys.length === 0 && !error && (
+        <div className="text-center py-12 bg-gray-50/50 rounded-xl border border-gray-200">
+          <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+          <p className="text-gray-600">Нет активных ключей. Выберите подписку выше.</p>
+        </div>
+      )}
+
+      {/* Fallback: Show Local Purchases if Remnawave Keys Not Available */}
+      {purchases.length > 0 && remnaKeys.length === 0 && (
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Ваши активные ключи</h2>
+          <div className="space-y-4">
+            {purchases.map((purchase) => {
+              const expired = isKeyExpired(purchase.expires_at);
+              return (
+                <div
+                  key={purchase.id}
+                  className={`bg-white/60 backdrop-blur-xl rounded-xl border p-6 transition-all ${expired
+                    ? "border-red-200/50 bg-red-50/30"
+                    : "border-gray-200/50"
+                    }`}
+                >
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {purchase.package_name}
+                        </h3>
+                        {expired && (
+                          <span className="text-xs font-semibold bg-red-100 text-red-700 px-2 py-1 rounded-full">
+                            Истёк
+                          </span>
+                        )}
+                        {!expired && (
+                          <span className="text-xs font-semibold bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                            Активен
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-4 h-4" />
+                          <span>до {formatDate(purchase.expires_at)}</span>
+                        </div>
+                        {purchase.price && (
+                          <span className="font-medium text-gray-900">
+                            {purchase.price} ₽
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Inbound ID / Username */}
+                      {purchase.remnawave_inbound_id && (
+                        <div className="mt-3 p-3 bg-gray-100/60 rounded-lg">
+                          <p className="text-xs text-gray-600 mb-1">Идентификатор ключа:</p>
+                          <div className="flex items-center gap-2">
+                            <code className="text-sm font-mono text-gray-900 flex-1 break-all">
+                              {purchase.remnawave_inbound_id}
+                            </code>
+                            <button
+                              onClick={() =>
+                                copyToClipboard(
+                                  purchase.remnawave_inbound_id,
+                                  `copy-${purchase.id}`
+                                )
+                              }
+                              className="p-2 hover:bg-gray-200 rounded-lg transition-colors flex-shrink-0"
+                              title="Скопировать"
+                            >
+                              {copiedId === `copy-${purchase.id}` ? (
+                                <Check className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-gray-600" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {purchases.length === 0 && (
+        <div className="text-center py-12">
+          <div className="w-16 h-16 bg-gray-200/50 rounded-full flex items-center justify-center mx-auto mb-4">
+            <ShoppingCart className="w-8 h-8 text-gray-400" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            У вас пока нет активных ключей
+          </h3>
+          <p className="text-gray-600">Выберите подписку выше, чтобы получить доступ</p>
+        </div>
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   sendEmailChangeCode,
   sendEmailChangedNotification,
 } from "../email.js";
+import { createVpnUser } from "../remnawave-wrapper.js";
 
 const router = Router();
 
@@ -42,13 +43,17 @@ function getAuthUserId(req) {
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
 
   if (!token) {
+    console.log("No token in Authorization header");
     return null;
   }
 
   try {
+    console.log("Verifying token with JWT_SECRET...");
     const payload = jwt.verify(token, process.env.JWT_SECRET);
+    console.log("Token verified successfully. User ID:", payload.sub);
     return payload.sub;
-  } catch {
+  } catch (err) {
+    console.log("JWT verification failed:", err.message);
     return null;
   }
 }
@@ -143,6 +148,22 @@ router.post("/verify", async (req, res) => {
     await pool.query("DELETE FROM verification_codes WHERE email = $1", [email]);
 
     const user = userResult.rows[0];
+
+    // Создаем VPN ключ в ремнавейв панели (первый ключ для нового пользователя)
+    const vpnResult = await createVpnUser(email, 1, 30);
+    if (vpnResult.success && vpnResult.user_uuid) {
+      // Сохраняем ID инбаунда в БД
+      await pool.query(
+        `UPDATE users SET remnawave_inbound_id = $1, vpn_key_created_at = NOW()
+         WHERE id = $2`,
+        [vpnResult.user_uuid, user.id],
+      );
+      console.log(`VPN key created for user ${email}: ${vpnResult.user_uuid} (${vpnResult.username})`);
+    } else {
+      console.warn(`Failed to create VPN key for user ${email}: ${vpnResult.error}`);
+      // Не блокируем регистрацию если ремнавейв недоступен
+    }
+
     const token = signToken(user);
 
     res.json({
@@ -265,7 +286,8 @@ router.get("/me", async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT id, email, email_verified, telegram_id, telegram_username, telegram_first_name, created_at
+      `SELECT id, email, email_verified, telegram_id, telegram_username, telegram_first_name, 
+              remnawave_inbound_id, vpn_key_created_at, created_at
        FROM users WHERE id = $1`,
       [userId],
     );
@@ -278,9 +300,14 @@ router.get("/me", async (req, res) => {
       user: {
         ...result.rows[0],
         telegram_id: result.rows[0].telegram_id ? String(result.rows[0].telegram_id) : null,
+        vpn_key: result.rows[0].remnawave_inbound_id ? {
+          inboundId: result.rows[0].remnawave_inbound_id,
+          createdAt: result.rows[0].vpn_key_created_at
+        } : null
       },
     });
-  } catch {
+  } catch (error) {
+    console.error("/me error:", error);
     res.status(401).json({ error: "Недействительный токен" });
   }
 });
@@ -486,6 +513,66 @@ router.post("/change-password", async (req, res) => {
   } catch (error) {
     console.error("Change password error:", error);
     res.status(500).json({ error: "Не удалось изменить пароль" });
+  }
+});
+
+// Endpoint для создания нового VPN ключа (резервного или если первый был удален)
+router.post("/vpn-key/create", async (req, res) => {
+  try {
+    const userId = getAuthUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Требуется авторизация" });
+    }
+
+    const result = await pool.query(
+      "SELECT id, email FROM users WHERE id = $1",
+      [userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Пользователь не найден" });
+    }
+
+    const user = result.rows[0];
+
+    // Get the next key number for this user
+    const countResult = await pool.query(
+      "SELECT COUNT(*) as count FROM purchases WHERE user_id = $1",
+      [userId]
+    );
+    const keyNumber = parseInt(countResult.rows[0].count) + 1;
+
+    // Создаем новый VPN ключ в ремнавейв панели
+    const vpnResult = await createVpnUser(user.email, keyNumber, 30);
+
+    if (!vpnResult.success) {
+      return res.status(503).json({
+        error: "Не удалось создать VPN ключ",
+        details: vpnResult.error
+      });
+    }
+
+    // Сохраняем ID инбаунда в БД
+    await pool.query(
+      `UPDATE users SET remnawave_inbound_id = $1, vpn_key_created_at = NOW()
+       WHERE id = $2`,
+      [vpnResult.user_uuid, user.id],
+    );
+
+    res.json({
+      message: "VPN ключ успешно создан",
+      vpn_key: {
+        inboundId: vpnResult.user_uuid,
+        username: vpnResult.username,
+        keyNumber: keyNumber,
+        createdAt: new Date(),
+        email: user.email
+      }
+    });
+  } catch (error) {
+    console.error("Create VPN key error:", error);
+    res.status(500).json({ error: "Ошибка при создании VPN ключа" });
   }
 });
 

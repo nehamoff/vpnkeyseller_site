@@ -7,7 +7,7 @@ import {
   verifyTelegramAuth,
   telegramPlaceholderEmail,
 } from "../telegram.js";
-import { getUserSubscriptions } from "../remnawave.js";
+import { getUserSubscriptions } from "../remnawave-wrapper.js";
 
 const router = Router();
 

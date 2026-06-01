@@ -1,15 +1,49 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import jwt from "jsonwebtoken";
 import { initDb, pool } from "./db.js";
 import authRoutes from "./routes/auth.js";
 import telegramRoutes from "./routes/telegram.js";
+import purchasesRoutes from "./routes/purchases.js";
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
 
-app.use(cors({ origin: process.env.FRONTEND_URL || true }));
+app.use(cors({
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      process.env.FRONTEND_URL || "http://localhost:5173",
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+      "http://localhost:3001",
+      "http://127.0.0.1:3001"
+    ];
+
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  }
+}));
 app.use(express.json());
+
+// Middleware для извлечения пользователя из токена
+app.use((req, res, next) => {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+
+  if (token) {
+    try {
+      const payload = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = { id: payload.sub, email: payload.email };
+    } catch (err) {
+      // Токен невалидный, но запрос может не требовать авторизации
+    }
+  }
+  next();
+});
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
@@ -17,6 +51,7 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/auth", telegramRoutes);
+app.use("/api/purchases", purchasesRoutes);
 
 async function start() {
   if (!process.env.DATABASE_URL) {

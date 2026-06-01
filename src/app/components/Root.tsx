@@ -12,22 +12,18 @@ export function Root() {
 
   useEffect(() => {
     const token = localStorage.getItem("vpn_token");
-    const legacyAuth = localStorage.getItem("vpn_authenticated");
-
-    if (!token && !legacyAuth) {
-      navigate("/login");
-      return;
-    }
 
     if (!token) {
-      setIsAuthenticated(true);
+      clearSession();
+      navigate("/login");
       return;
     }
 
     authApi
       .me()
       .then(() => setIsAuthenticated(true))
-      .catch(() => {
+      .catch((err) => {
+        console.error("Auth verification failed:", err);
         clearSession();
         navigate("/login");
       });
@@ -66,9 +62,8 @@ export function Root() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full w-72 bg-white/60 backdrop-blur-xl border-r border-gray-200/50 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } lg:translate-x-0`}
+        className={`fixed top-0 left-0 h-full w-72 bg-white/60 backdrop-blur-xl border-r border-gray-200/50 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          } lg:translate-x-0`}
       >
         <div className="flex flex-col h-full p-6">
           {/* Logo */}
@@ -97,11 +92,10 @@ export function Root() {
                     navigate(item.path);
                     setIsSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                    isActive
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isActive
                       ? "bg-gray-900 text-white shadow-lg"
                       : "text-gray-700 hover:bg-white/60 hover:shadow-md"
-                  }`}
+                    }`}
                 >
                   <Icon className="w-5 h-5" />
                   <span>{item.label}</span>
