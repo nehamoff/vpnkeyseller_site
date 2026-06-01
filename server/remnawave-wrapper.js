@@ -140,7 +140,10 @@ export async function renewSubscription(email, keyNumber = 1, days = 30) {
         const result = await executePython(["renew", email, String(keyNumber), String(days)]);
         return {
             success: true,
-            data: result.data
+            data: result.data,
+            user_uuid: result.user_uuid,
+            username: result.username,
+            expire_at: result.expire_at,
         };
     } catch (error) {
         console.error("Failed to renew subscription:", error.message);
@@ -149,6 +152,99 @@ export async function renewSubscription(email, keyNumber = 1, days = 30) {
             error: error.message
         };
     }
+}
+
+/**
+ * Renew subscription by exact Remnawave username
+ */
+export async function renewSubscriptionByUsername(username, days = 30) {
+    try {
+        if (process.env.TEST_MODE === "true") {
+            const expireAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+            return {
+                success: true,
+                username,
+                expire_at: expireAt,
+                data: { mode: "test" },
+            };
+        }
+
+        const result = await executePython(["renew-user", username, String(days)]);
+        return {
+            success: true,
+            data: result.data,
+            user_uuid: result.user_uuid,
+            username: result.username,
+            expire_at: result.expire_at,
+        };
+    } catch (error) {
+        console.error("Failed to renew by username:", error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Traffic stats for one key
+ */
+export async function getTrafficByUsername(username) {
+    try {
+        if (process.env.TEST_MODE === "true") {
+            const limit = 26843545600;
+            const used = 5368709120;
+            return {
+                success: true,
+                traffic_limit: limit,
+                used_traffic: used,
+                leftover: limit - used,
+            };
+        }
+
+        const result = await executePython(["traffic-user", username]);
+        return {
+            success: true,
+            traffic_limit: result.traffic_limit,
+            used_traffic: result.used_traffic,
+            leftover: result.leftover,
+        };
+    } catch (error) {
+        console.error("Failed to get traffic:", error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+const BYTES_PER_GB = 1073741824;
+
+export function formatTrafficBytes(bytes) {
+    const value = Number(bytes) || 0;
+    return Math.round((value / BYTES_PER_GB) * 100) / 100;
+}
+
+export function mapRemnawaveKey(user) {
+    const limit = Number(user.trafficLimitBytes) || 0;
+    const used = Number(user.userTraffic?.usedTrafficBytes) || 0;
+    const leftover = Math.max(0, limit - used);
+
+    const subscriptionUrl =
+        user.subscriptionUrl ||
+        user.subscription_url ||
+        user.subscribeUrl ||
+        null;
+
+    return {
+        uuid: user.uuid,
+        username: user.username,
+        email: user.email,
+        expireAt: user.expireAt,
+        subscriptionUrl,
+        status: user.status,
+        trafficLimitBytes: limit,
+        usedTrafficBytes: used,
+        leftoverBytes: leftover,
+        trafficLimitGb: formatTrafficBytes(limit),
+        usedTrafficGb: formatTrafficBytes(used),
+        leftoverGb: formatTrafficBytes(leftover),
+        trafficUsedPercent: limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0,
+    };
 }
 
 /**

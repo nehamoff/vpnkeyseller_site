@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS purchases (
   remnawave_inbound_id VARCHAR(255),
   yookassa_payment_id VARCHAR(255),
   payment_status VARCHAR(50) DEFAULT 'pending',
+  purchase_type VARCHAR(32) DEFAULT 'new',
+  remnawave_username VARCHAR(255),
   status VARCHAR(50) DEFAULT 'active',
   created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL

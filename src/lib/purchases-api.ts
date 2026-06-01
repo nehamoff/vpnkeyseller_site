@@ -15,12 +15,32 @@ export interface Purchase {
     purchased_at: string;
     expires_at: string | null;
     remnawave_inbound_id: string | null;
+    remnawave_username?: string | null;
+    purchase_type?: string | null;
     yookassa_payment_id?: string | null;
     payment_status?: string | null;
     status: string;
 }
 
+export interface RemnaKey {
+    uuid?: string;
+    username?: string;
+    email?: string;
+    expireAt?: string;
+    subscriptionUrl?: string;
+    trafficLimitGb?: number;
+    usedTrafficGb?: number;
+    leftoverGb?: number;
+    trafficUsedPercent?: number;
+}
+
 const PENDING_PURCHASE_KEY = "vpn_pending_purchase_id";
+const PENDING_PAYMENT_URL_KEY = "vpn_pending_payment_url";
+
+export interface CreatePurchaseOptions {
+    /** false — не редиректить сразу (показать оверлей в UI) */
+    redirect?: boolean;
+}
 
 export interface PurchasePaymentInfo {
     id: string;
@@ -90,7 +110,44 @@ export const purchasesAPI = {
     /**
      * Создаёт платёж YooKassa (1 ₽) и покупку; при наличии confirmation_url перенаправляет на оплату.
      */
-    async create(packageName: string, price?: number, daysCount: number = 30) {
+    /**
+     * Продление существующего ключа (оплата + Remnawave).
+     */
+    async renewKey(
+        username: string,
+        userUuid: string | undefined,
+        packageName: string,
+        daysCount: number,
+        price?: number,
+        options: CreatePurchaseOptions = {}
+    ) {
+        const result = await request<PurchaseResponse>("/purchases/keys/renew", {
+            method: "POST",
+            body: JSON.stringify({
+                username,
+                user_uuid: userUuid,
+                package_name: packageName,
+                days_count: daysCount,
+                price: price ?? null,
+            }),
+        });
+
+        if (result.payment?.confirmation_url) {
+            this.setPendingPayment(result.purchase.id, result.payment.confirmation_url);
+            if (options.redirect !== false) {
+                window.location.href = result.payment.confirmation_url;
+            }
+        }
+
+        return result;
+    },
+
+    async create(
+        packageName: string,
+        price?: number,
+        daysCount: number = 30,
+        options: CreatePurchaseOptions = {}
+    ) {
         const result = await request<PurchaseResponse>("/purchases", {
             method: "POST",
             body: JSON.stringify({
@@ -101,11 +158,34 @@ export const purchasesAPI = {
         });
 
         if (result.payment?.confirmation_url) {
-            localStorage.setItem(PENDING_PURCHASE_KEY, String(result.purchase.id));
-            window.location.href = result.payment.confirmation_url;
+            this.setPendingPayment(result.purchase.id, result.payment.confirmation_url);
+            if (options.redirect !== false) {
+                window.location.href = result.payment.confirmation_url;
+            }
         }
 
         return result;
+    },
+
+    setPendingPayment(purchaseId: number, confirmationUrl: string) {
+        localStorage.setItem(PENDING_PURCHASE_KEY, String(purchaseId));
+        localStorage.setItem(PENDING_PAYMENT_URL_KEY, confirmationUrl);
+    },
+
+    getPendingPaymentUrl(): string | null {
+        return localStorage.getItem(PENDING_PAYMENT_URL_KEY);
+    },
+
+    goToPendingPayment(purchaseId?: number) {
+        if (purchaseId != null) {
+            localStorage.setItem(PENDING_PURCHASE_KEY, String(purchaseId));
+        }
+        const url = this.getPendingPaymentUrl();
+        if (url) {
+            window.location.href = url;
+            return true;
+        }
+        return false;
     },
 
     /**
@@ -113,6 +193,12 @@ export const purchasesAPI = {
      */
     async confirm(purchaseId: number) {
         return request<PurchaseResponse>(`/purchases/${purchaseId}/confirm`, {
+            method: "POST",
+        });
+    },
+
+    async cancel(purchaseId: number) {
+        return request<{ message: string; purchase: Purchase }>(`/purchases/${purchaseId}/cancel`, {
             method: "POST",
         });
     },
@@ -126,6 +212,7 @@ export const purchasesAPI = {
 
     clearPendingPurchaseId() {
         localStorage.removeItem(PENDING_PURCHASE_KEY);
+        localStorage.removeItem(PENDING_PAYMENT_URL_KEY);
     },
 
     /**
@@ -183,7 +270,7 @@ export const purchasesAPI = {
      * Получает ключи пользователя из Remnawave панели
      */
     async getRemnaKeys() {
-        return request<{ success: boolean; keys: any[] }>("/purchases/remnawave/keys");
+        return request<{ success: boolean; keys: RemnaKey[] }>("/purchases/remnawave/keys");
     },
 
     /**

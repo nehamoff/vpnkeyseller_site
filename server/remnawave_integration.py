@@ -284,76 +284,111 @@ class RemnawaveAPI:
             logger.error(f"Failed to update email for user {user_uuid}: {str(e)}")
             return {"success": False, "error": str(e)}
 
+    def _renew_user_record(self, user: Dict[str, Any], days: int) -> Dict[str, Any]:
+        """Extend subscription for an existing Remnawave user."""
+        username = user.get("username")
+        if not username:
+            return {"success": False, "error": "Username missing in Remnawave user"}
+
+        current_expire = user.get("expireAt")
+        if current_expire:
+            expire_dt = datetime.fromisoformat(current_expire.replace("Z", "+00:00"))
+            if expire_dt.tzinfo:
+                expire_dt = expire_dt.astimezone().replace(tzinfo=None)
+            base_date = max(expire_dt, datetime.now())
+        else:
+            base_date = datetime.now()
+
+        new_expire = base_date + timedelta(days=int(days))
+
+        traffic_limit = user.get("trafficLimitBytes", self.BASE_LIMIT)
+        used_traffic = user.get("userTraffic", {}).get("usedTrafficBytes", 0)
+        leftover = max(0, traffic_limit - used_traffic)
+        new_limit = self.BASE_LIMIT + leftover
+
+        payload = {
+            "username": username,
+            "trafficLimitBytes": new_limit,
+            "expireAt": new_expire.isoformat(),
+            "hwidDeviceLimit": user.get("hwidDeviceLimit", 3),
+            "trafficLimitStrategy": "MONTH_ROLLING",
+            "activeInternalSquads": [self.PAID_SQUAD_ID],
+        }
+
+        response = requests.patch(
+            f"{self.base_url}/api/users",
+            headers=self._get_headers(),
+            json=payload,
+            timeout=30,
+        )
+        response.raise_for_status()
+        result = response.json()
+        user_response = result.get("response", result)
+
+        return {
+            "success": True,
+            "data": result,
+            "username": username,
+            "user_uuid": user.get("uuid") or user_response.get("uuid"),
+            "expire_at": user_response.get("expireAt") or new_expire.isoformat(),
+            "traffic_limit": new_limit,
+            "used_traffic": used_traffic,
+        }
+
+    def renew_by_username(self, username: str, days: int = 30) -> Dict[str, Any]:
+        """Renew subscription by exact Remnawave username."""
+        try:
+            user_data = self.get_user_by_username(username)
+            if not user_data["success"]:
+                return {"success": False, "error": f"Ключ {username} не найден в Remnawave"}
+
+            result = self._renew_user_record(user_data["data"], days)
+            if result["success"]:
+                logger.info(f"✓ Renewed subscription for {username} (+{days} days)")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to renew {username}: {str(e)}")
+            return {"success": False, "error": str(e)}
+
     def renew_subscription(
         self, email: str, key_number: int = 1, days: int = 30
     ) -> Dict[str, Any]:
-        """
-        Renew user subscription
-
-        Args:
-            email: User email
-            key_number: Key number for this user
-            days: Number of days to extend
-
-        Returns:
-            API response
-        """
+        """Legacy renew by email + key number (only if username matches email_key)."""
         try:
             email_base = email.split("@")[0]
             username = f"{email_base}_{key_number}"
 
             user_data = self.get_user_by_username(username)
             if not user_data["success"]:
-                # User doesn't exist, create new
                 logger.info(f"User {username} not found, creating new")
                 return self.create_new_user(email, key_number, days)
 
-            user = user_data["data"]
-
-            # Calculate new expiration
-            current_expire = user.get("expireAt")
-            if current_expire:
-                expire_dt = datetime.fromisoformat(
-                    current_expire.replace("Z", "+00:00")
-                )
-                if expire_dt.tzinfo:
-                    expire_dt = expire_dt.astimezone().replace(tzinfo=None)
-                base_date = max(expire_dt, datetime.now())
-            else:
-                base_date = datetime.now()
-
-            new_expire = base_date + timedelta(days=days)
-
-            # Get current traffic usage
-            used_traffic = user.get("userTraffic", {}).get("usedTrafficBytes", 0)
-            leftover = max(0, self.BASE_LIMIT - used_traffic)
-
-            # Determine new traffic limit
-            new_limit = self.BASE_LIMIT + leftover
-
-            payload = {
-                "username": username,
-                "trafficLimitBytes": new_limit,
-                "expireAt": new_expire.isoformat(),
-                "hwidDeviceLimit": 3,
-                "trafficLimitStrategy": "MONTH_ROLLING",
-                "activeInternalSquads": [self.PAID_SQUAD_ID],
-            }
-
-            response = requests.patch(
-                f"{self.base_url}/api/users",
-                headers=self._get_headers(),
-                json=payload,
-                timeout=30,
-            )
-
-            response.raise_for_status()
-            result = response.json()
-
-            logger.info(f"✓ Renewed subscription for {email}")
-            return {"success": True, "data": result}
+            return self._renew_user_record(user_data["data"], days)
         except Exception as e:
             logger.error(f"Failed to renew subscription for {email}: {str(e)}")
+            return {"success": False, "error": str(e)}
+
+    def get_traffic_by_username(self, username: str) -> Dict[str, Any]:
+        """Traffic stats for a single key."""
+        try:
+            user_data = self.get_user_by_username(username)
+            if not user_data["success"]:
+                return {"success": False, "error": "User not found"}
+
+            user = user_data["data"]
+            traffic_limit = user.get("trafficLimitBytes", 0)
+            used_traffic = user.get("userTraffic", {}).get("usedTrafficBytes", 0)
+            leftover = max(0, traffic_limit - used_traffic)
+
+            return {
+                "success": True,
+                "username": username,
+                "traffic_limit": traffic_limit,
+                "used_traffic": used_traffic,
+                "leftover": leftover,
+            }
+        except Exception as e:
+            logger.error(f"Failed to get traffic for {username}: {str(e)}")
             return {"success": False, "error": str(e)}
 
     def get_leftover_bytes(self, email: str) -> Dict[str, Any]:
@@ -418,8 +453,10 @@ def main():
         print("Usage: python remnawave_integration.py <command> [args...]")
         print("Commands:")
         print("  create <email> [key_number] [days]  - Create new user")
-        print("  renew <email> [key_number] [days]   - Renew subscription")
+        print("  renew <email> [key_number] [days]   - Renew subscription (legacy)")
+        print("  renew-user <username> [days]        - Renew by Remnawave username")
         print("  traffic <email>                      - Get traffic info")
+        print("  traffic-user <username>              - Traffic by username")
         print("  add-gb <email> <gb_amount>          - Add GB to user")
         sys.exit(1)
 
@@ -455,9 +492,18 @@ def main():
                 days = 30
             result = api.renew_subscription(email, key_number, days)
 
+        elif command == "renew-user":
+            username = sys.argv[2]
+            days = int(sys.argv[3]) if len(sys.argv) > 3 else 30
+            result = api.renew_by_username(username, days)
+
         elif command == "traffic":
             email = sys.argv[2]
             result = api.get_leftover_bytes(email)
+
+        elif command == "traffic-user":
+            username = sys.argv[2]
+            result = api.get_traffic_by_username(username)
 
         elif command == "add-gb":
             email = sys.argv[2]
