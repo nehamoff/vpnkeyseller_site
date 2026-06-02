@@ -2,13 +2,24 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import {
     createVpnUser,
+    createOrRenewVpnForTelegram,
     getAllRemnaKeysForAccount,
     renewSubscriptionByUsername,
     mapRemnawaveKey,
     getHwidDevicesForKey,
     deleteHwidDeviceForKey,
 } from "../remnawave-wrapper.js";
-import { createPayment, getPaymentStatus, cancelPayment } from "../yookassa-wrapper.js";
+import {
+    createPayment,
+    getPaymentStatus,
+    scheduleYookassaCancel,
+} from "../yookassa-wrapper.js";
+import {
+    tryReusePendingPurchase,
+    cancelOtherPendingPurchases,
+    syncPendingWithYookassa,
+    assertPurchaseCanBeCancelled,
+} from "../purchase-payment-helpers.js";
 import { addGbByUsername } from "../remnawave-wrapper.js";
 import { getGbPackage, GB_TOPUP_PACKAGES } from "../gb-packages.js";
 import { resolveSubscriptionChargeAmount } from "../subscription-packages.js";
@@ -19,7 +30,7 @@ const PAID_STATUSES = new Set(["succeeded", "waiting_for_capture"]);
 
 const PURCHASE_FIELDS = `id, user_id, package_name, price, days_count, gb_amount, purchased_at, expires_at,
   remnawave_inbound_id, remnawave_username, purchase_type,
-  yookassa_payment_id, payment_status, status`;
+  yookassa_payment_id, payment_status, status, confirmation_url`;
 
 function normalizeOrigin(value) {
     try {
@@ -113,27 +124,53 @@ async function getAccountRemnaKeys(userId) {
     return { email, telegramId, rawKeys };
 }
 
-/** Ключи с сайта — только при активной покупке; ключи из Telegram-бота — всегда. */
+function normalizeUuid(value) {
+    return value ? String(value).trim().toLowerCase() : "";
+}
+
+/** Максимальная дата окончания из БД (как subscription_expires_at в боте). */
+async function getMaxDbExpireIso(userId, username = null) {
+    const query = username
+        ? `SELECT MAX(expires_at) AS max_exp FROM purchases
+           WHERE user_id = $1 AND remnawave_username = $2 AND expires_at IS NOT NULL`
+        : `SELECT MAX(expires_at) AS max_exp FROM purchases
+           WHERE user_id = $1 AND status IN ('active', 'awaiting_payment') AND expires_at IS NOT NULL`;
+    const params = username ? [userId, username] : [userId];
+    const result = await pool.query(query, params);
+    const maxExp = result.rows[0]?.max_exp;
+    return maxExp ? new Date(maxExp).toISOString() : null;
+}
+
+/** Ключи из Telegram-бота — всегда; ключи с сайта — при активной покупке (по UUID/username или любые с email). */
 async function filterKeysForUser(userId, rawKeys) {
     const result = await pool.query(
         `SELECT remnawave_inbound_id, remnawave_username
          FROM purchases
-         WHERE user_id = $1 AND status = 'active' AND remnawave_inbound_id IS NOT NULL`,
+         WHERE user_id = $1 AND status = 'active'
+           AND (remnawave_inbound_id IS NOT NULL OR remnawave_username IS NOT NULL)`,
         [userId]
     );
 
+    const hasActivePurchase = result.rows.length > 0;
     const paidUuids = new Set();
     const paidUsernames = new Set();
     for (const row of result.rows) {
-        if (row.remnawave_inbound_id) paidUuids.add(row.remnawave_inbound_id);
+        const uuid = normalizeUuid(row.remnawave_inbound_id);
+        if (uuid) paidUuids.add(uuid);
         if (row.remnawave_username) paidUsernames.add(row.remnawave_username);
     }
 
     return rawKeys.filter((key) => {
         if (key.keySource === "telegram") return true;
-        const uuid = key.uuid || key.id;
+
+        const uuid = normalizeUuid(key.uuid || key.id);
         if (uuid && paidUuids.has(uuid)) return true;
         if (key.username && paidUsernames.has(key.username)) return true;
+
+        // Ключи, найденные по email в Remnawave, показываем при любой активной покупке
+        // (UUID в БД мог устареть после пересоздания ключа в панели)
+        if (hasActivePurchase && key.keySource === "site") return true;
+
         return false;
     });
 }
@@ -236,7 +273,8 @@ async function fulfillRenewal(purchaseRow) {
         }
     }
 
-    const renewResult = await renewSubscriptionByUsername(username, daysCount);
+    const dbExpireIso = await getMaxDbExpireIso(userId, username);
+    const renewResult = await renewSubscriptionByUsername(username, daysCount, dbExpireIso);
     if (!renewResult.success) {
         throw new Error(renewResult.error || "Не удалось продлить ключ");
     }
@@ -245,6 +283,7 @@ async function fulfillRenewal(purchaseRow) {
         ? new Date(renewResult.expire_at)
         : new Date(Date.now() + daysCount * 24 * 60 * 60 * 1000);
     const userUuid = renewResult.user_uuid || inboundId;
+    const remnaUsername = renewResult.username || username;
 
     const paymentStatusResult = paymentId ? await getPaymentStatus(paymentId) : null;
     const paymentStatus = paymentStatusResult?.status || purchaseRow.payment_status;
@@ -262,20 +301,21 @@ async function fulfillRenewal(purchaseRow) {
         `UPDATE purchases
        SET expires_at = $1,
            remnawave_inbound_id = COALESCE(remnawave_inbound_id, $2),
-           payment_status = $3,
+           remnawave_username = COALESCE(remnawave_username, $3),
+           payment_status = $4,
            status = 'active',
            purchased_at = NOW(),
            updated_at = NOW()
-       WHERE id = $4
+       WHERE id = $5
        RETURNING ${PURCHASE_FIELDS}`,
-        [expiresAt, userUuid, paymentStatus, id]
+        [expiresAt, userUuid, remnaUsername, paymentStatus, id]
     );
 
     return {
         purchase: updateResult.rows[0],
         inbound: {
             id: userUuid,
-            username,
+            username: remnaUsername,
             expiresAt: expiresAt.toISOString(),
         },
         alreadyFulfilled: false,
@@ -302,11 +342,14 @@ async function fulfillPurchase(purchaseRow) {
         return { purchase: purchaseRow, alreadyFulfilled: true };
     }
 
-    const userResult = await pool.query("SELECT email FROM users WHERE id = $1", [userId]);
+    const userResult = await pool.query(
+        "SELECT email, telegram_id FROM users WHERE id = $1",
+        [userId]
+    );
     if (userResult.rows.length === 0) {
         throw new Error("Пользователь не найден");
     }
-    const email = userResult.rows[0].email;
+    const { email, telegram_id: telegramId } = userResult.rows[0];
 
     const countResult = await pool.query(
         "SELECT COUNT(*) as count FROM purchases WHERE user_id = $1 AND status = 'active'",
@@ -315,12 +358,42 @@ async function fulfillPurchase(purchaseRow) {
     const keyNumber = parseInt(countResult.rows[0].count, 10) + 1;
 
     const purchaseDate = new Date();
-    const expiresAt = new Date(purchaseDate.getTime() + daysCount * 24 * 60 * 60 * 1000);
+    const dbExpireIso = await getMaxDbExpireIso(userId);
 
-    const vpnResult = await createVpnUser(email, keyNumber, daysCount);
+    let vpnResult;
+    if (telegramId) {
+        vpnResult = await createOrRenewVpnForTelegram(
+            telegramId,
+            daysCount,
+            email,
+            dbExpireIso
+        );
+    } else {
+        const lastKey = await pool.query(
+            `SELECT remnawave_username FROM purchases
+             WHERE user_id = $1 AND status = 'active' AND remnawave_username IS NOT NULL
+             ORDER BY purchased_at DESC LIMIT 1`,
+            [userId]
+        );
+        const existingUsername = lastKey.rows[0]?.remnawave_username;
+        if (existingUsername) {
+            vpnResult = await renewSubscriptionByUsername(
+                existingUsername,
+                daysCount,
+                dbExpireIso
+            );
+        } else {
+            vpnResult = await createVpnUser(email, keyNumber, daysCount);
+        }
+    }
+
     if (!vpnResult.success) {
         throw new Error(vpnResult.error || "Не удалось создать VPN ключ");
     }
+
+    const expiresAt = vpnResult.expire_at
+        ? new Date(vpnResult.expire_at)
+        : new Date(purchaseDate.getTime() + daysCount * 24 * 60 * 60 * 1000);
 
     const paymentStatusResult = paymentId ? await getPaymentStatus(paymentId) : null;
     const paymentStatus = paymentStatusResult?.status || purchaseRow.payment_status;
@@ -328,14 +401,22 @@ async function fulfillPurchase(purchaseRow) {
     const updateResult = await pool.query(
         `UPDATE purchases
        SET remnawave_inbound_id = $1,
-           purchased_at = $2,
-           expires_at = $3,
-           payment_status = $4,
+           remnawave_username = COALESCE($2, remnawave_username),
+           purchased_at = $3,
+           expires_at = $4,
+           payment_status = $5,
            status = 'active',
            updated_at = NOW()
-       WHERE id = $5
+       WHERE id = $6
        RETURNING ${PURCHASE_FIELDS}`,
-        [vpnResult.user_uuid, purchaseDate, expiresAt, paymentStatus, id]
+        [
+            vpnResult.user_uuid,
+            vpnResult.username || null,
+            purchaseDate,
+            expiresAt,
+            paymentStatus,
+            id,
+        ]
     );
 
     await pool.query(
@@ -385,9 +466,28 @@ router.post("/", async (req, res) => {
         }
 
         const email = userResult.rows[0].email;
-        const orderId = `vpn-${userId}-${Date.now()}`;
         const returnUrl = resolvePaymentReturnUrl(req);
 
+        const reused = await tryReusePendingPurchase(pool, userId, (p) => {
+            if (p.purchase_type !== "new") return false;
+            if (p.package_name !== package_name) return false;
+            if (Number(p.days_count) !== Number(days_count)) return false;
+            return Number(p.price) === Number(chargeAmount);
+        });
+
+        if (reused) {
+            console.log(`[Purchase] Reusing pending #${reused.purchase.id} for ${email}`);
+            return res.json({
+                message: "Продолжите оплату по ссылке",
+                purchase: reused.purchase,
+                payment: reused.payment,
+                reused: true,
+            });
+        }
+
+        await cancelOtherPendingPurchases(pool, userId);
+
+        const orderId = `vpn-${userId}-${Date.now()}`;
         console.log(
             `[Purchase] Payment ${chargeAmount}₽ for ${email}, order ${orderId} (${package_name}), return ${returnUrl}`
         );
@@ -402,35 +502,34 @@ router.post("/", async (req, res) => {
             });
         }
 
+        if (!paymentResult.confirmation_url) {
+            return res.status(500).json({
+                error: "Платёж создан без ссылки на оплату",
+                details: "Повторите попытку или обратитесь в поддержку",
+            });
+        }
+
         const paymentId = paymentResult.payment_id;
 
         const purchaseResult = await pool.query(
             `INSERT INTO purchases (
-         user_id, package_name, price, days_count, yookassa_payment_id, payment_status, status, purchase_type
+         user_id, package_name, price, days_count, yookassa_payment_id, payment_status,
+         status, purchase_type, confirmation_url
        )
-       VALUES ($1, $2, $3, $4, $5, $6, 'awaiting_payment', 'new')
+       VALUES ($1, $2, $3, $4, $5, $6, 'awaiting_payment', 'new', $7)
        RETURNING ${PURCHASE_FIELDS}`,
-            [userId, package_name, chargeAmount, days_count, paymentId, paymentResult.status]
+            [
+                userId,
+                package_name,
+                chargeAmount,
+                days_count,
+                paymentId,
+                paymentResult.status,
+                paymentResult.confirmation_url,
+            ]
         );
 
         const purchase = purchaseResult.rows[0];
-
-        if (!paymentResult.confirmation_url) {
-            const statusResult = await getPaymentStatus(paymentId);
-            if (statusResult.success && PAID_STATUSES.has(statusResult.status)) {
-                const fulfilled = await fulfillPurchase(purchase);
-                return res.json({
-                    message: "Покупка оплачена",
-                    purchase: fulfilled.purchase,
-                    inbound: fulfilled.inbound,
-                    payment: {
-                        id: paymentId,
-                        status: statusResult.status,
-                        paid: statusResult.paid,
-                    },
-                });
-            }
-        }
 
         res.json({
             message: "Перейдите по ссылке для оплаты",
@@ -446,6 +545,60 @@ router.post("/", async (req, res) => {
         console.error("Purchase error:", error);
         res.status(500).json({
             error: "Ошибка создания покупки",
+            details: error.message,
+        });
+    }
+});
+
+/**
+ * Ссылка на оплату для незавершённого заказа (из БД или ЮKassa).
+ * GET /api/purchases/:id/payment-url
+ */
+router.get("/:id/payment-url", async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ error: "Требуется авторизация" });
+        }
+
+        const purchaseId = Number(req.params.id);
+        if (!Number.isFinite(purchaseId)) {
+            return res.status(400).json({ error: "Некорректный ID покупки" });
+        }
+
+        const purchaseResult = await pool.query(
+            `SELECT ${PURCHASE_FIELDS} FROM purchases WHERE id = $1 AND user_id = $2`,
+            [purchaseId, userId]
+        );
+
+        if (purchaseResult.rows.length === 0) {
+            return res.status(404).json({ error: "Покупка не найдена" });
+        }
+
+        const purchase = purchaseResult.rows[0];
+
+        if (purchase.status !== "awaiting_payment") {
+            return res.status(400).json({ error: "Заказ уже не ожидает оплаты" });
+        }
+
+        const sync = await syncPendingWithYookassa(pool, purchase);
+        if (!sync.reusable) {
+            const hint =
+                sync.reason === "canceled" || sync.reason === "expired"
+                    ? "Создайте новый заказ"
+                    : sync.error || "Платёж недоступен для оплаты";
+            return res.status(400).json({ error: hint, reason: sync.reason });
+        }
+
+        res.json({
+            purchase_id: purchase.id,
+            confirmation_url: sync.confirmationUrl,
+            payment_status: sync.status,
+        });
+    } catch (error) {
+        console.error("Payment URL error:", error);
+        res.status(500).json({
+            error: "Не удалось получить ссылку на оплату",
             details: error.message,
         });
     }
@@ -565,34 +718,61 @@ router.post("/:id/cancel", async (req, res) => {
 
         const purchase = purchaseResult.rows[0];
 
-        if (purchase.status !== "awaiting_payment") {
-            return res.status(400).json({ error: "Этот заказ нельзя отменить" });
+        const cancelCheck = await assertPurchaseCanBeCancelled(purchase);
+        if (!cancelCheck.ok) {
+            return res.status(cancelCheck.code === "already_paid" ? 409 : 400).json({
+                error: cancelCheck.error,
+                code: cancelCheck.code,
+            });
         }
 
-        let paymentStatus = "canceled";
-
-        if (purchase.yookassa_payment_id) {
-            const cancelResult = await cancelPayment(purchase.yookassa_payment_id);
-            if (cancelResult.success) {
-                paymentStatus = cancelResult.status || "canceled";
-            } else {
-                const statusResult = await getPaymentStatus(purchase.yookassa_payment_id);
-                if (statusResult.success && PAID_STATUSES.has(statusResult.status)) {
-                    return res.status(400).json({
-                        error: "Платёж уже проведён — отмена невозможна",
-                    });
-                }
-            }
+        if (cancelCheck.alreadyCancelled) {
+            const existing = await pool.query(
+                `SELECT id, user_id, package_name, price, days_count, purchased_at, expires_at,
+            remnawave_inbound_id, yookassa_payment_id, payment_status, status
+         FROM purchases WHERE id = $1`,
+                [purchaseId]
+            );
+            return res.json({
+                message: "Платёж уже был отменён",
+                purchase: existing.rows[0],
+            });
         }
 
         const updateResult = await pool.query(
             `UPDATE purchases
-       SET status = 'cancelled', payment_status = $1, updated_at = NOW()
-       WHERE id = $2
+       SET status = 'cancelled',
+           payment_status = 'canceled',
+           updated_at = NOW()
+       WHERE id = $1 AND user_id = $2 AND status = 'awaiting_payment'
        RETURNING id, user_id, package_name, price, days_count, purchased_at, expires_at,
                  remnawave_inbound_id, yookassa_payment_id, payment_status, status`,
-            [paymentStatus, purchaseId]
+            [purchaseId, userId]
         );
+
+        if (updateResult.rows.length === 0) {
+            const current = await pool.query(
+                `SELECT status FROM purchases WHERE id = $1 AND user_id = $2`,
+                [purchaseId, userId]
+            );
+            if (current.rows[0]?.status === "cancelled") {
+                const row = await pool.query(
+                    `SELECT id, user_id, package_name, price, days_count, purchased_at, expires_at,
+              remnawave_inbound_id, yookassa_payment_id, payment_status, status
+           FROM purchases WHERE id = $1`,
+                    [purchaseId]
+                );
+                return res.json({
+                    message: "Платёж уже был отменён",
+                    purchase: row.rows[0],
+                });
+            }
+            return res.status(400).json({ error: "Этот заказ нельзя отменить" });
+        }
+
+        scheduleYookassaCancel(purchase.yookassa_payment_id);
+
+        console.log(`[Purchase] Cancelled #${purchaseId} for user ${userId}`);
 
         res.json({
             message: "Платёж отменён",
@@ -689,9 +869,31 @@ router.post("/keys/add-gb", async (req, res) => {
 
         const email = owned.email;
         const keyUuid = user_uuid || owned.key.uuid;
-        const orderId = `gb-${userId}-${Date.now()}`;
+        const label = `Докупка · ${pkg.label}`;
         const returnUrl = resolvePaymentReturnUrl(req);
 
+        const reused = await tryReusePendingPurchase(pool, userId, (p) => {
+            return (
+                p.purchase_type === "gb_topup" &&
+                p.remnawave_username === username &&
+                Number(p.gb_amount) === pkg.gb &&
+                Number(p.price) === pkg.price
+            );
+        });
+
+        if (reused) {
+            return res.json({
+                message: "Продолжите оплату докупки",
+                purchase: reused.purchase,
+                payment: reused.payment,
+                gb: pkg.gb,
+                reused: true,
+            });
+        }
+
+        await cancelOtherPendingPurchases(pool, userId);
+
+        const orderId = `gb-${userId}-${Date.now()}`;
         const paymentResult = await createPayment(orderId, email, pkg.price, returnUrl);
 
         if (!paymentResult.success) {
@@ -701,15 +903,17 @@ router.post("/keys/add-gb", async (req, res) => {
             });
         }
 
-        const label = `Докупка · ${pkg.label}`;
+        if (!paymentResult.confirmation_url) {
+            return res.status(500).json({ error: "Платёж создан без ссылки на оплату" });
+        }
 
         const purchaseResult = await pool.query(
             `INSERT INTO purchases (
          user_id, package_name, price, days_count, gb_amount,
          yookassa_payment_id, payment_status, status,
-         purchase_type, remnawave_username, remnawave_inbound_id
+         purchase_type, remnawave_username, remnawave_inbound_id, confirmation_url
        )
-       VALUES ($1, $2, $3, 0, $4, $5, $6, 'awaiting_payment', 'gb_topup', $7, $8)
+       VALUES ($1, $2, $3, 0, $4, $5, $6, 'awaiting_payment', 'gb_topup', $7, $8, $9)
        RETURNING ${PURCHASE_FIELDS}`,
             [
                 userId,
@@ -720,6 +924,7 @@ router.post("/keys/add-gb", async (req, res) => {
                 paymentResult.status,
                 username,
                 keyUuid || null,
+                paymentResult.confirmation_url,
             ]
         );
 
@@ -772,9 +977,31 @@ router.post("/keys/renew", async (req, res) => {
 
         const email = owned.email;
         const keyUuid = user_uuid || owned.key.uuid;
-        const orderId = `renew-${userId}-${Date.now()}`;
+        const renewalLabel = `Продление · ${package_name}`;
         const returnUrl = resolvePaymentReturnUrl(req);
 
+        const reused = await tryReusePendingPurchase(pool, userId, (p) => {
+            return (
+                p.purchase_type === "renewal" &&
+                p.remnawave_username === username &&
+                p.package_name === renewalLabel &&
+                Number(p.days_count) === Number(days_count) &&
+                Number(p.price) === Number(chargeAmount)
+            );
+        });
+
+        if (reused) {
+            return res.json({
+                message: "Продолжите оплату продления",
+                purchase: reused.purchase,
+                payment: reused.payment,
+                reused: true,
+            });
+        }
+
+        await cancelOtherPendingPurchases(pool, userId);
+
+        const orderId = `renew-${userId}-${Date.now()}`;
         const paymentResult = await createPayment(orderId, email, chargeAmount, returnUrl);
 
         if (!paymentResult.success) {
@@ -784,15 +1011,17 @@ router.post("/keys/renew", async (req, res) => {
             });
         }
 
-        const renewalLabel = `Продление · ${package_name}`;
+        if (!paymentResult.confirmation_url) {
+            return res.status(500).json({ error: "Платёж создан без ссылки на оплату" });
+        }
 
         const purchaseResult = await pool.query(
             `INSERT INTO purchases (
          user_id, package_name, price, days_count,
          yookassa_payment_id, payment_status, status,
-         purchase_type, remnawave_username, remnawave_inbound_id
+         purchase_type, remnawave_username, remnawave_inbound_id, confirmation_url
        )
-       VALUES ($1, $2, $3, $4, $5, $6, 'awaiting_payment', 'renewal', $7, $8)
+       VALUES ($1, $2, $3, $4, $5, $6, 'awaiting_payment', 'renewal', $7, $8, $9)
        RETURNING ${PURCHASE_FIELDS}`,
             [
                 userId,
@@ -803,6 +1032,7 @@ router.post("/keys/renew", async (req, res) => {
                 paymentResult.status,
                 username,
                 keyUuid || null,
+                paymentResult.confirmation_url,
             ]
         );
 
@@ -927,7 +1157,12 @@ router.get("/remnawave/keys", async (req, res) => {
         const visibleKeys = await filterKeysForUser(userId, account.rawKeys);
         const keys = visibleKeys.map(mapRemnawaveKey);
 
-        res.json({ success: true, keys });
+        res.json({
+            success: true,
+            keys,
+            total: keys.length,
+            rawCount: account.rawKeys.length,
+        });
     } catch (error) {
         console.error("Fetch Remnawave keys error:", error);
         res.status(500).json({ error: "Не удалось загрузить VPN-ключи" });
@@ -940,6 +1175,15 @@ router.get("/", async (req, res) => {
         if (!userId) {
             return res.status(401).json({ error: "Требуется авторизация" });
         }
+
+        await pool.query(
+            `UPDATE purchases
+       SET status = 'cancelled', payment_status = 'expired', updated_at = NOW()
+       WHERE user_id = $1
+         AND status = 'awaiting_payment'
+         AND created_at < NOW() - INTERVAL '48 hours'`,
+            [userId]
+        );
 
         const result = await pool.query(
             `SELECT ${PURCHASE_FIELDS}

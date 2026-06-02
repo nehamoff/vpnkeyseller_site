@@ -13,8 +13,9 @@ from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(script_dir, ".env"))
-load_dotenv(os.path.join(script_dir, "..", ".env"))
+_env_path = os.path.join(script_dir, ".env")
+if os.path.isfile(_env_path):
+    load_dotenv(_env_path, encoding="utf-8")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,23 +50,37 @@ class YooKassaAPI:
     """YooKassa Payment API client"""
 
     def __init__(self):
-        self.account_id = os.getenv("YOOKASSA_ACCOUNT_ID")
-        self.secret_key = os.getenv("YOOKASSA_SECRET_KEY")
+        self.account_id = os.getenv("YOOKASSA_ACCOUNT_ID") or os.getenv("YOOKASSA_SHOP_ID")
+        self.secret_key = os.getenv("YOOKASSA_SECRET_KEY") or os.getenv("YOOKASSA_API_KEY")
         self.return_url = (
             os.getenv("YOOKASSA_RETURN_URL")
             or os.getenv("FRONTEND_URL", "http://127.0.0.1:5173").rstrip("/")
             + "/my-keys?payment=return"
         )
+        self.use_receipt = os.getenv("YOOKASSA_USE_RECEIPT", "false").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
 
         if not self.account_id or not self.secret_key:
-            logger.error("YOOKASSA_ACCOUNT_ID or YOOKASSA_SECRET_KEY not set in .env")
+            logger.error(
+                "YOOKASSA_ACCOUNT_ID/YOOKASSA_SECRET_KEY (or SHOP_ID/API_KEY) not set in server/.env"
+            )
             raise ValueError("Missing YooKassa credentials in environment")
 
         if not YOOKASSA_AVAILABLE:
-            raise RuntimeError("YooKassa SDK is not available")
+            raise RuntimeError("YooKassa SDK is not available. Run: pip install yookassa")
 
         Configuration.configure(self.account_id, self.secret_key)
-        logger.info(f"YooKassa configured for account: {self.account_id[:10]}...")
+        # Короткий таймаут и без ретраев — иначе nginx отдаёт 504 (60s × 3 попытки SDK)
+        Configuration.timeout = int(os.getenv("YOOKASSA_TIMEOUT", "12"))
+        if hasattr(Configuration, "max_attempts"):
+            Configuration.max_attempts = int(os.getenv("YOOKASSA_MAX_ATTEMPTS", "1"))
+        logger.info(
+            f"YooKassa configured for account: {self.account_id[:10]}... "
+            f"(timeout={Configuration.timeout}s, max_attempts={getattr(Configuration, 'max_attempts', '?')})"
+        )
 
     def create_payment(
         self,
@@ -91,7 +106,7 @@ class YooKassaAPI:
                 "metadata": {"order_id": order_id} if order_id else {},
             }
 
-            if customer_email:
+            if customer_email and self.use_receipt:
                 payment_data["receipt"] = {
                     "customer": {"email": customer_email},
                     "items": [
@@ -99,14 +114,25 @@ class YooKassaAPI:
                             "description": description[:128],
                             "quantity": "1.00",
                             "amount": {"value": amount_str, "currency": "RUB"},
-                            "vat_code": 1,
+                            "vat_code": int(os.getenv("YOOKASSA_VAT_CODE", "1")),
                             "payment_mode": "full_payment",
                             "payment_subject": "service",
                         }
                     ],
                 }
 
-            response = Payment.create(payment_data, str(uuid.uuid4()))
+            try:
+                response = Payment.create(payment_data, str(uuid.uuid4()))
+            except Exception as receipt_error:
+                if payment_data.get("receipt"):
+                    logger.warning(
+                        "Payment with receipt failed, retrying without receipt: %s",
+                        receipt_error,
+                    )
+                    payment_data.pop("receipt", None)
+                    response = Payment.create(payment_data, str(uuid.uuid4()))
+                else:
+                    raise
 
             confirmation_url = None
             if response.confirmation:
@@ -192,6 +218,18 @@ class YooKassaAPI:
             }
 
         except Exception as e:
+            try:
+                current = Payment.find_one(payment_id)
+                if current.status in ("canceled", "cancelled", "expired"):
+                    logger.info(f"Payment {payment_id} already {current.status}")
+                    return {
+                        "success": True,
+                        "payment_id": payment_id,
+                        "status": current.status,
+                        "already": True,
+                    }
+            except Exception:
+                pass
             error_msg = f"Failed to cancel payment: {str(e)}"
             logger.error(error_msg)
             return {"success": False, "error": error_msg}

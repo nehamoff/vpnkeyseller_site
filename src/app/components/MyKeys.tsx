@@ -8,7 +8,12 @@ import {
   Smartphone,
 } from "lucide-react";
 import { authApi, type UserProfile } from "../../lib/api";
-import { purchasesAPI, type Purchase, type RemnaKey } from "../../lib/purchases-api";
+import {
+  purchasesAPI,
+  PurchaseError,
+  type Purchase,
+  type RemnaKey,
+} from "../../lib/purchases-api";
 import { PurchaseCheckoutDialog } from "./purchase/PurchaseCheckoutDialog";
 import { PaymentOverlay } from "./purchase/PaymentOverlay";
 import { PendingPurchasesBanner } from "./purchase/PendingPurchasesBanner";
@@ -49,7 +54,7 @@ type OverlayVariant = "creating" | "redirect" | "confirm" | null;
 export function MyKeys() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [remnaKeys, setRemnaKeys] = useState<any[]>([]);
+  const [remnaKeys, setRemnaKeys] = useState<RemnaKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -103,9 +108,11 @@ export function MyKeys() {
 
   const refreshRemnaKeys = async () => {
     const remnaResponse = await purchasesAPI.getRemnaKeys();
-    if (remnaResponse.success && remnaResponse.keys) {
+    if (remnaResponse.success) {
       setRemnaKeys(Array.isArray(remnaResponse.keys) ? remnaResponse.keys : []);
+      return;
     }
+    setRemnaKeys([]);
   };
 
   const loadData = async () => {
@@ -253,17 +260,18 @@ export function MyKeys() {
     }
   };
 
-  const handleResumePayment = (purchaseId: number) => {
+  const handleResumePayment = async (purchaseId: number) => {
     const pkg = purchases.find((p) => p.id === purchaseId);
     setOverlayPackageName(pkg?.package_name);
     setOverlayAmountRub(pkg ? Number(pkg.price) : undefined);
     setActivePurchaseId(purchaseId);
+    setError(null);
 
-    const resumed = purchasesAPI.goToPendingPayment(purchaseId);
+    const resumed = await purchasesAPI.resumePayment(purchaseId);
     if (!resumed) {
       setActivePurchaseId(null);
       setError(
-        "Ссылка на оплату устарела. Нажмите «Купить» на тарифе ещё раз — создастся новый заказ."
+        "Не удалось открыть оплату. Нажмите «Купить» снова или «Отменить» для старого заказа."
       );
     } else {
       setOverlay("redirect");
@@ -290,7 +298,12 @@ export function MyKeys() {
       setActivePurchaseId(null);
       showSuccessToast(`Заказ «${result.purchase.package_name}» отменён.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось отменить платёж");
+      if (err instanceof PurchaseError && err.code === "already_paid") {
+        setError(err.message);
+        void handleCheckPayment(purchaseId);
+      } else {
+        setError(err instanceof Error ? err.message : "Не удалось отменить платёж");
+      }
     } finally {
       setCancelOverlayLoading(false);
       setCancellingId(null);
@@ -430,8 +443,13 @@ export function MyKeys() {
   };
 
   const handleOverlayCancel = () => {
-    if (activePurchaseId != null) {
-      void handleCancelPayment(activePurchaseId);
+    const pendingId =
+      activePurchaseId ??
+      purchases.find((p) => p.status === "awaiting_payment")?.id ??
+      purchasesAPI.getPendingPurchaseId();
+
+    if (pendingId != null) {
+      void handleCancelPayment(pendingId);
       return;
     }
     if (redirectTimerRef.current) {

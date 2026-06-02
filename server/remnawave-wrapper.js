@@ -3,16 +3,21 @@
  * Calls Python integration module to manage VPN keys
  */
 
-import { spawn } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
 import { getPurchasedGbBytesByEmail } from "./purchased-gb.js";
+import { executePythonScript } from "./python-exec.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const PYTHON_BIN = process.env.PYTHON_BIN || "python3";
+const PYTHON_LIST_COMMANDS = new Set(["get-all-users", "get-by-telegram-id"]);
+const REMNAWAVE_SCRIPT = path.join(__dirname, "remnawave_integration.py");
+const REMNAWAVE_TIMEOUT_MS = Number(process.env.REMNAWAVE_PYTHON_TIMEOUT_MS || 90000);
 
 /**
  * Generate a mock UUID for test mode
@@ -31,57 +36,29 @@ function generateMockUUID(email, keyNumber) {
  * @param {string[]} args - Python script arguments
  * @returns {Promise<object>} - Parsed JSON response
  */
-function executePython(args) {
-    return new Promise((resolve, reject) => {
-        const scriptPath = path.join(__dirname, "remnawave_integration.py");
-        console.log(`[Python] Executing: python ${scriptPath} ${args.join(" ")}`);
+async function executePython(args) {
+    const command = args[0];
+    const isListCommand = PYTHON_LIST_COMMANDS.has(command);
+    const timeoutMs = isListCommand
+        ? Number(process.env.REMNAWAVE_LIST_TIMEOUT_MS || 120000)
+        : REMNAWAVE_TIMEOUT_MS;
 
-        const pythonProcess = spawn("python", [scriptPath, ...args], {
-            env: { ...process.env },
-            stdio: ["pipe", "pipe", "pipe"]
+    try {
+        return await executePythonScript(REMNAWAVE_SCRIPT, args, {
+            timeoutMs,
+            logPrefix: "[Remnawave]",
         });
-
-        let stdout = "";
-        let stderr = "";
-
-        pythonProcess.stdout.on("data", (data) => {
-            stdout += data.toString();
-        });
-
-        pythonProcess.stderr.on("data", (data) => {
-            stderr += data.toString();
-            console.error("[Python stderr]", data.toString());
-        });
-
-        pythonProcess.on("close", (code) => {
-            console.log(`[Python] Process exited with code ${code}`);
-
-            if (stderr) {
-                console.error("[Python full stderr]", stderr);
-            }
-
-            if (stdout) {
-                console.log("[Python stdout]", stdout);
-            }
-
-            try {
-                const result = JSON.parse(stdout);
-
-                if (result.success) {
-                    resolve(result);
-                } else {
-                    reject(new Error(result.error || "Python returned success: false"));
-                }
-            } catch (e) {
-                reject(new Error(`Failed to parse Python response: ${e.message}\nStdout: ${stdout}\nStderr: ${stderr}`));
-            }
-        });
-
-        pythonProcess.on("error", (err) => {
-            console.error("[Python spawn error]", err.message);
-            reject(err);
-        });
-    });
+    } catch (error) {
+        if (isListCommand) {
+            return {
+                success: true,
+                data: [],
+                count: 0,
+                error: error.message,
+            };
+        }
+        throw error;
+    }
 }
 
 /**
@@ -160,7 +137,7 @@ export async function renewSubscription(email, keyNumber = 1, days = 30) {
 /**
  * Renew subscription by exact Remnawave username
  */
-export async function renewSubscriptionByUsername(username, days = 30) {
+export async function renewSubscriptionByUsername(username, days = 30, dbExpireIso = null) {
     try {
         if (process.env.TEST_MODE === "true") {
             const expireAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
@@ -172,7 +149,10 @@ export async function renewSubscriptionByUsername(username, days = 30) {
             };
         }
 
-        const result = await executePython(["renew-user", username, String(days)]);
+        const args = ["renew-user", username, String(days)];
+        if (dbExpireIso) args.push(String(dbExpireIso));
+
+        const result = await executePython(args);
         return {
             success: true,
             data: result.data,
@@ -182,6 +162,41 @@ export async function renewSubscriptionByUsername(username, days = 30) {
         };
     } catch (error) {
         console.error("Failed to renew by username:", error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Создать/продлить ключ user_{telegramId} (логика Telegram-бота).
+ */
+export async function createOrRenewVpnForTelegram(telegramId, days = 30, email = null, dbExpireIso = null) {
+    try {
+        if (process.env.TEST_MODE === "true") {
+            const tgId = String(telegramId);
+            const mockUUID = `tg-test-${tgId}-${Date.now()}`;
+            return {
+                success: true,
+                user_uuid: mockUUID,
+                username: `user_${tgId}`,
+                expire_at: new Date(Date.now() + days * 86400000).toISOString(),
+            };
+        }
+
+        const args = ["renew-telegram", String(telegramId), String(days)];
+        if (dbExpireIso) args.push(String(dbExpireIso));
+        if (email) args.push(email);
+
+        const result = await executePython(args);
+
+        return {
+            success: true,
+            user_uuid: result.user_uuid,
+            username: result.username,
+            expire_at: result.expire_at,
+            data: result.data,
+        };
+    } catch (error) {
+        console.error("Failed create/renew telegram VPN:", error.message);
         return { success: false, error: error.message };
     }
 }
@@ -227,11 +242,15 @@ export function mapRemnawaveKey(user) {
     const used = Number(user.userTraffic?.usedTrafficBytes) || 0;
     const leftover = Math.max(0, limit - used);
 
+    const subBase = (process.env.REMNAWAVE_SUB_URL || "https://sub.coffemaniavpn.online").replace(
+        /\/$/,
+        ""
+    );
     const subscriptionUrl =
         user.subscriptionUrl ||
         user.subscription_url ||
         user.subscribeUrl ||
-        null;
+        (user.shortUuid ? `${subBase}/${user.shortUuid}` : null);
 
     const keySource = user.keySource === "telegram" ? "telegram" : "site";
 
@@ -559,7 +578,7 @@ export async function getAllRemnaKeysForAccount(email, telegramId = null) {
     const data = mergeRemnaUserLists(emailUsers, telegramUsers);
 
     return {
-        success: data.length > 0,
+        success: data.length > 0 || emailResult.success || telegramUsers.length > 0,
         data,
         count: data.length,
         error: data.length === 0 ? emailResult.error || tgError : undefined,
@@ -632,10 +651,29 @@ export async function updateInboundKey(email, newExpireDate) {
  * @returns {Promise<{configured: boolean, subscriptions: array}>}
  */
 export async function getUserSubscriptions(telegramId) {
-    // This is a stub - returns configured status
-    // In practice, this would query Remnawave for user data
-    return {
-        configured: true,
-        subscriptions: []
-    };
+    const configured = Boolean(process.env.REMNAWAVE_BASE_URL && process.env.REMNAWAVE_TOKEN);
+    if (!configured) {
+        return { configured: false, subscriptions: [] };
+    }
+
+    try {
+        const tgResult = await getUsersByTelegramId(String(telegramId));
+        const users = tgResult.success && Array.isArray(tgResult.data) ? tgResult.data : [];
+        const subscriptions = users.map((user) => {
+            const mapped = mapRemnawaveKey({ ...user, keySource: "telegram" });
+            return {
+                id: mapped.uuid,
+                username: mapped.username,
+                expireAt: mapped.expireAt,
+                subscriptionUrl: mapped.subscriptionUrl,
+                status: mapped.status,
+                trafficLimitGb: mapped.trafficLimitGb,
+                usedTrafficGb: mapped.usedTrafficGb,
+            };
+        });
+        return { configured: true, subscriptions };
+    } catch (error) {
+        console.error("getUserSubscriptions error:", error.message);
+        return { configured: true, subscriptions: [] };
+    }
 }

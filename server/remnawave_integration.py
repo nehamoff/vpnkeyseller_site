@@ -31,6 +31,7 @@ class RemnawaveAPI:
     """Remnawave API client for VPN key management"""
 
     BASE_LIMIT = 26843545600  # 25 GB in bytes
+    WEEK_LIMIT = 7516192768  # ~7 GB — тариф на 7 дней (как в Telegram-боте)
     TRIAL_SQUAD_ID = "ffa0ca48-bb6e-447b-a404-f1808b09c967"
     PAID_SQUAD_ID = "6f11955f-6b95-4f96-bba4-3d866de8ce83"
 
@@ -396,8 +397,7 @@ class RemnawaveAPI:
                 }
             else:
                 return {
-                    "success": False,
-                    "error": "No keys found",
+                    "success": True,
                     "data": [],
                     "count": 0,
                 }
@@ -672,34 +672,42 @@ class RemnawaveAPI:
             "failed": failed,
         }
 
-    def _renew_user_record(self, user: Dict[str, Any], days: int) -> Dict[str, Any]:
-        """Extend subscription for an existing Remnawave user."""
+    def _renew_user_record(
+        self,
+        user: Dict[str, Any],
+        days: int,
+        db_expire_iso: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Продление как в Telegram-боте: срок от max(БД, панель, сейчас) + перенос остатка трафика.
+        """
         username = user.get("username")
         if not username:
             return {"success": False, "error": "Username missing in Remnawave user"}
 
-        current_expire = user.get("expireAt")
-        if current_expire:
-            expire_dt = datetime.fromisoformat(current_expire.replace("Z", "+00:00"))
-            if expire_dt.tzinfo:
-                expire_dt = expire_dt.astimezone().replace(tzinfo=None)
-            base_date = max(expire_dt, datetime.now())
-        else:
-            base_date = datetime.now()
+        now = datetime.now()
+        panel_expire = self._parse_dt(user.get("expireAt"))
+        db_expire = self._parse_dt(db_expire_iso)
+        base_expire = max((dt for dt in (db_expire, panel_expire, now) if dt is not None))
+        new_expire = base_expire + timedelta(days=int(days))
 
-        new_expire = base_date + timedelta(days=int(days))
-
-        # Продление только продлевает срок; перенос трафика — отдельно в apply_monthly_traffic_rollover.
-        traffic_limit = int(user.get("trafficLimitBytes") or self.BASE_LIMIT)
         used_traffic = int(user.get("userTraffic", {}).get("usedTrafficBytes") or 0)
+        rollover_leftover = max(0, self.BASE_LIMIT - used_traffic)
+        if int(days) == 7:
+            new_traffic_limit = self.WEEK_LIMIT + rollover_leftover
+        else:
+            new_traffic_limit = self.BASE_LIMIT + rollover_leftover
 
         payload = {
             "username": username,
+            "trafficLimitBytes": new_traffic_limit,
             "expireAt": new_expire.isoformat(),
-            "hwidDeviceLimit": user.get("hwidDeviceLimit", 3),
+            "hwidDeviceLimit": int(user.get("hwidDeviceLimit") or 3),
             "trafficLimitStrategy": "MONTH_ROLLING",
             "activeInternalSquads": [self.PAID_SQUAD_ID],
         }
+        if user.get("telegramId") is not None:
+            payload["telegramId"] = user.get("telegramId")
 
         response = requests.patch(
             f"{self.base_url}/api/users",
@@ -711,26 +719,95 @@ class RemnawaveAPI:
         result = response.json()
         user_response = result.get("response", result)
 
+        logger.info(
+            f"✓ Renewed {username}: +{days}d → {new_expire.isoformat()}, "
+            f"limit {round(new_traffic_limit / 1073741824, 2)} GB"
+        )
+
         return {
             "success": True,
             "data": result,
             "username": username,
             "user_uuid": user.get("uuid") or user_response.get("uuid"),
             "expire_at": user_response.get("expireAt") or new_expire.isoformat(),
-            "traffic_limit": traffic_limit,
+            "traffic_limit": new_traffic_limit,
             "used_traffic": used_traffic,
         }
 
-    def renew_by_username(self, username: str, days: int = 30) -> Dict[str, Any]:
+    def create_user_telegram(
+        self, telegram_id: int, days: int = 30, email: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Создать или продлить ключ user_{telegram_id} (логика Telegram-бота)."""
+        tg_id = int(telegram_id)
+        existing = self.get_users_by_telegram_id(tg_id)
+        if existing.get("success") and existing.get("data"):
+            logger.info(f"Telegram user {tg_id} exists — renewing instead of create")
+            return self._renew_user_record(existing["data"][0], days)
+
+        expire_at = (datetime.now() + timedelta(days=int(days))).isoformat()
+        username = f"user_{tg_id}"
+        payload = {
+            "username": username,
+            "trafficLimitBytes": self.BASE_LIMIT,
+            "expireAt": expire_at,
+            "createdAt": datetime.now().isoformat(),
+            "telegramId": tg_id,
+            "trafficLimitStrategy": "MONTH_ROLLING",
+            "hwidDeviceLimit": 3,
+            "activeInternalSquads": [self.PAID_SQUAD_ID],
+        }
+
+        response = requests.post(
+            f"{self.base_url}/api/users",
+            headers=self._get_headers(),
+            json=payload,
+            timeout=30,
+        )
+        response.raise_for_status()
+        result = response.json()
+        user_uuid = result.get("response", {}).get("uuid")
+        if email and user_uuid:
+            self.update_user_email(user_uuid, email)
+
+        return {
+            "success": True,
+            "data": result,
+            "user_uuid": user_uuid,
+            "username": username,
+            "email": email,
+        }
+
+    def renew_by_telegram_id(
+        self,
+        telegram_id: int,
+        days: int = 30,
+        db_expire_iso: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Продлить подписку по Telegram ID."""
+        try:
+            tg_result = self.get_users_by_telegram_id(int(telegram_id))
+            if not tg_result.get("success") or not tg_result.get("data"):
+                return self.create_user_telegram(telegram_id, days)
+
+            user = tg_result["data"][0]
+            return self._renew_user_record(user, days, db_expire_iso)
+        except Exception as e:
+            logger.error(f"Failed to renew telegram {telegram_id}: {e}")
+            return {"success": False, "error": str(e)}
+
+    def renew_by_username(
+        self,
+        username: str,
+        days: int = 30,
+        db_expire_iso: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Renew subscription by exact Remnawave username."""
         try:
             user_data = self.get_user_by_username(username)
             if not user_data["success"]:
                 return {"success": False, "error": f"Ключ {username} не найден"}
 
-            result = self._renew_user_record(user_data["data"], days)
-            if result["success"]:
-                logger.info(f"✓ Renewed subscription for {username} (+{days} days)")
+            result = self._renew_user_record(user_data["data"], days, db_expire_iso)
             return result
         except Exception as e:
             logger.error(f"Failed to renew {username}: {str(e)}")
@@ -1000,7 +1077,20 @@ def main():
         elif command == "renew-user":
             username = sys.argv[2]
             days = int(sys.argv[3]) if len(sys.argv) > 3 else 30
-            result = api.renew_by_username(username, days)
+            db_expire = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
+            result = api.renew_by_username(username, days, db_expire)
+
+        elif command == "create-telegram":
+            tg_id = int(sys.argv[2])
+            days = int(sys.argv[3]) if len(sys.argv) > 3 else 30
+            email = sys.argv[4] if len(sys.argv) > 4 else None
+            result = api.create_user_telegram(tg_id, days, email)
+
+        elif command == "renew-telegram":
+            tg_id = int(sys.argv[2])
+            days = int(sys.argv[3]) if len(sys.argv) > 3 else 30
+            db_expire = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
+            result = api.renew_by_telegram_id(tg_id, days, db_expire)
 
         elif command == "traffic":
             email = sys.argv[2]
