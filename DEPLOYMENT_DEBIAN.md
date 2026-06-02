@@ -261,7 +261,7 @@ server {
     server_name coffeemaniavpn.ru www.coffeemaniavpn.ru;
 
     # Redirect to HTTPS
-    return 301 https://$server_name$request_uri;
+    return 301 https://$ser
 }
 
 server {
