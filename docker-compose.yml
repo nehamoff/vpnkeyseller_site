@@ -78,19 +78,19 @@ services:
       - cafemaniavpn-network
     restart: unless-stopped
   # Python интеграция (опционально для отдельного сервиса)
-  python-integration:
-    build:
-      context: ./server
-      dockerfile: Dockerfile.python
-    container_name: cafemaniavpn-python
-    environment:
-      REMNAWAVE_BASE_URL: ${REMNAWAVE_BASE_URL:-}
-      REMNAWAVE_TOKEN: ${REMNAWAVE_TOKEN:-}
-    volumes:
-      - ./server:/app
-    networks:
-      - cafemaniavpn-network
-    restart: unless-stopped
+  # python-integration:
+  #   build:
+  #     context: ./server
+  #     dockerfile: Dockerfile.python
+  #   container_name: cafemaniavpn-python
+  #   environment:
+  #     REMNAWAVE_BASE_URL: ${REMNAWAVE_BASE_URL:-}
+  #     REMNAWAVE_TOKEN: ${REMNAWAVE_TOKEN:-}
+  #   volumes:
+  #     - ./server:/app
+  #   networks:
+  #     - cafemaniavpn-network
+  #   restart: unless-stopped
 
 volumes:
   postgres_data:
