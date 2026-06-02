@@ -1,4 +1,4 @@
-import { AlertCircle, CreditCard, Loader2, RefreshCw, XCircle } from "lucide-react";
+﻿import { AlertCircle, CreditCard, Loader2, RefreshCw, XCircle } from "lucide-react";
 import type { Purchase } from "../../../lib/purchases-api";
 import { PAYMENT_CHARGE_RUB } from "./purchase-constants";
 
@@ -48,11 +48,11 @@ export function PendingPurchasesBanner({
           return (
             <li
               key={purchase.id}
-              className="flex flex-col gap-3 rounded-xl bg-white/70 border border-amber-200/60 px-4 py-3"
+              className="flex flex-col gap-3 rounded-xl bg-card/85 border border-amber-200/60 px-4 py-3"
             >
               <div>
-                <p className="font-medium text-gray-900">{purchase.package_name}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="font-medium text-coffee-espresso">{purchase.package_name}</p>
+                <p className="text-xs text-coffee-mocha/90 mt-0.5">
                   Заказ №{purchase.id} · к оплате {amountRub} ₽
                 </p>
               </div>
@@ -70,7 +70,7 @@ export function PendingPurchasesBanner({
                   type="button"
                   onClick={() => onCheckPayment(purchase.id)}
                   disabled={busy}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-coffee-latte bg-card text-sm font-medium text-coffee-espresso hover:bg-coffee-cappuccino/50 disabled:opacity-50"
                 >
                   {confirmingId === purchase.id ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />

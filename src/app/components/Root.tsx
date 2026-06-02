@@ -45,42 +45,38 @@ export function Root() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 relative overflow-hidden">
-      {/* Glass effect background elements */}
+    <div className="min-h-screen bg-gradient-to-br from-coffee-milk via-coffee-cappuccino/40 to-coffee-latte/30 relative overflow-hidden">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 -left-20 w-96 h-96 bg-white/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 -right-20 w-96 h-96 bg-gray-300/20 rounded-full blur-3xl" />
+        <div className="absolute top-20 -left-20 w-96 h-96 bg-coffee-milk/50 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 -right-20 w-96 h-96 bg-coffee-mocha/15 rounded-full blur-3xl" />
       </div>
 
-      {/* Sidebar overlay */}
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-coffee-espresso/25 backdrop-blur-sm z-40 lg:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full w-72 bg-white/60 backdrop-blur-xl border-r border-gray-200/50 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-          } lg:translate-x-0`}
+        className={`fixed top-0 left-0 h-full w-72 surface-glass border-r border-coffee-latte/40 shadow-coffee-xl z-50 transform transition-transform duration-300 ease-in-out ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } lg:translate-x-0`}
       >
         <div className="flex flex-col h-full p-6">
-          {/* Logo */}
           <div className="flex items-center justify-between mb-12">
             <div className="flex items-center gap-3">
               <Logo size="md" />
-              <h1 className="text-xl font-semibold text-gray-900">Кофемания VPN</h1>
+              <h1 className="text-xl font-semibold text-coffee-espresso">Кофемания VPN</h1>
             </div>
             <button
               onClick={() => setIsSidebarOpen(false)}
-              className="lg:hidden p-2 hover:bg-gray-100/50 rounded-lg transition-colors"
+              className="lg:hidden p-2 hover:bg-coffee-cappuccino/60 rounded-lg transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 text-coffee-espresso" />
             </button>
           </div>
 
-          {/* Navigation */}
           <nav className="flex-1 space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -92,10 +88,11 @@ export function Root() {
                     navigate(item.path);
                     setIsSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isActive
-                      ? "bg-gray-900 text-white shadow-lg"
-                      : "text-gray-700 hover:bg-white/60 hover:shadow-md"
-                    }`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                    isActive
+                      ? "bg-coffee-espresso text-coffee-milk shadow-coffee-lg"
+                      : "text-coffee-espresso/80 hover:bg-coffee-cappuccino/70 hover:shadow-coffee"
+                  }`}
                 >
                   <Icon className="w-5 h-5" />
                   <span>{item.label}</span>
@@ -104,10 +101,9 @@ export function Root() {
             })}
           </nav>
 
-          {/* Logout button */}
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-coffee-espresso/80 hover:bg-red-50 hover:text-red-700 transition-all"
           >
             <LogOut className="w-5 h-5" />
             <span>Выйти</span>
@@ -115,19 +111,17 @@ export function Root() {
         </div>
       </aside>
 
-      {/* Main content */}
       <div className="lg:ml-72 min-h-screen">
-        {/* Header */}
-        <header className="bg-white/60 backdrop-blur-xl border-b border-gray-200/50 sticky top-0 z-30">
+        <header className="surface-glass border-b border-coffee-latte/40 sticky top-0 z-30">
           <div className="px-6 py-4 flex items-center justify-between">
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="lg:hidden p-2 hover:bg-gray-100/50 rounded-lg transition-colors"
+              className="lg:hidden p-2 hover:bg-coffee-cappuccino/60 rounded-lg transition-colors"
             >
-              <Menu className="w-6 h-6" />
+              <Menu className="w-6 h-6 text-coffee-espresso" />
             </button>
             <div className="lg:block hidden">
-              <h2 className="text-2xl font-semibold text-gray-900">
+              <h2 className="text-2xl font-semibold text-coffee-espresso">
                 {navItems.find((item) => item.path === location.pathname)?.label || ""}
               </h2>
             </div>
@@ -137,7 +131,6 @@ export function Root() {
           </div>
         </header>
 
-        {/* Page content */}
         <main className="p-6 relative z-10">
           <Outlet />
         </main>

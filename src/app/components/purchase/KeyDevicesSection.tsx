@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import {
   ChevronDown,
   Laptop,
@@ -33,12 +33,12 @@ function deviceLabel(device: HwidDevice): string {
 function DeviceIcon({ platform }: { platform?: string | null }) {
   const p = (platform || "").toLowerCase();
   if (p.includes("ios") || p.includes("android")) {
-    return <Smartphone className="h-4 w-4 text-gray-500 shrink-0" />;
+    return <Smartphone className="h-4 w-4 text-coffee-mocha/90 shrink-0" />;
   }
   if (p.includes("windows") || p.includes("mac") || p.includes("linux")) {
-    return <Laptop className="h-4 w-4 text-gray-500 shrink-0" />;
+    return <Laptop className="h-4 w-4 text-coffee-mocha/90 shrink-0" />;
   }
-  return <Monitor className="h-4 w-4 text-gray-500 shrink-0" />;
+  return <Monitor className="h-4 w-4 text-coffee-mocha/90 shrink-0" />;
 }
 
 function formatDeviceDate(value?: string | null) {
@@ -113,23 +113,23 @@ export function KeyDevicesSection({ username, deviceLimit = 3 }: KeyDevicesSecti
         setOpen(next);
         if (next && !loaded) void loadDevices();
       }}
-      className="mt-3 border border-gray-100 rounded-xl overflow-hidden bg-white/50"
+      className="mt-3 border border-coffee-cappuccino/60 rounded-xl overflow-hidden bg-card/80"
     >
-      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50/80 transition-colors">
+      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-coffee-cappuccino/50/80 transition-colors">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900">Подключённые устройства</p>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-sm font-medium text-coffee-espresso">Подключённые устройства</p>
+          <p className="text-xs text-coffee-mocha/90 mt-0.5">
             Лимит HWID: {slotsLabel} · можно отвязать устройство и освободить слот
           </p>
         </div>
         <ChevronDown
-          className={`h-5 w-5 text-gray-500 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-5 w-5 text-coffee-mocha/90 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
         />
       </CollapsibleTrigger>
 
-      <CollapsibleContent className="px-4 pb-4 pt-0 border-t border-gray-100">
+      <CollapsibleContent className="px-4 pb-4 pt-0 border-t border-coffee-cappuccino/60">
         {loading && (
-          <div className="flex items-center gap-2 py-4 text-sm text-gray-500">
+          <div className="flex items-center gap-2 py-4 text-sm text-coffee-mocha/90">
             <Loader2 className="h-4 w-4 animate-spin" />
             Загрузка устройств…
           </div>
@@ -152,7 +152,7 @@ export function KeyDevicesSection({ username, deviceLimit = 3 }: KeyDevicesSecti
         )}
 
         {!loading && !error && devices.length === 0 && loaded && (
-          <p className="text-sm text-gray-500 py-3">
+          <p className="text-sm text-coffee-mocha/90 py-3">
             Нет привязанных устройств. После первого подключения VPN-клиента они появятся здесь.
           </p>
         )}
@@ -165,18 +165,18 @@ export function KeyDevicesSection({ username, deviceLimit = 3 }: KeyDevicesSecti
               return (
                 <li
                   key={device.hwid}
-                  className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2.5"
+                  className="flex items-start gap-3 rounded-lg border border-coffee-cappuccino/60 bg-coffee-cappuccino/40 px-3 py-2.5"
                 >
                   <DeviceIcon platform={device.platform} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <p className="text-sm font-medium text-coffee-espresso truncate">
                       {deviceLabel(device)}
                     </p>
-                    <p className="text-xs text-gray-500 font-mono truncate mt-0.5" title={device.hwid}>
+                    <p className="text-xs text-coffee-mocha/90 font-mono truncate mt-0.5" title={device.hwid}>
                       {device.hwid}
                     </p>
                     {(device.osVersion || seen) && (
-                      <p className="text-xs text-gray-400 mt-1">
+                      <p className="text-xs text-coffee-latte mt-1">
                         {[device.osVersion && `ОС ${device.osVersion}`, seen && `активность ${seen}`]
                           .filter(Boolean)
                           .join(" · ")}
@@ -206,7 +206,7 @@ export function KeyDevicesSection({ username, deviceLimit = 3 }: KeyDevicesSecti
           <button
             type="button"
             onClick={() => void loadDevices()}
-            className="mt-3 text-xs text-gray-500 hover:text-gray-800 underline"
+            className="mt-3 text-xs text-coffee-mocha/90 hover:text-coffee-espresso underline"
           >
             Обновить список
           </button>

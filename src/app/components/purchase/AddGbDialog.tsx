@@ -1,4 +1,4 @@
-import {
+﻿import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -47,11 +47,11 @@ export function AddGbDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-sm mb-3">
-          <p className="text-gray-500 text-xs">Ключ</p>
-          <p className="font-medium text-gray-900">{keyInfo.username}</p>
+        <div className="rounded-lg bg-coffee-cappuccino/40 border border-coffee-latte/50 px-3 py-2.5 text-sm mb-3">
+          <p className="text-coffee-mocha/90 text-xs">Ключ</p>
+          <p className="font-medium text-coffee-espresso">{keyInfo.username}</p>
           {keyInfo.trafficLimitGb != null && (
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-coffee-mocha/90 mt-1">
               Сейчас: {keyInfo.usedTrafficGb ?? 0} / {keyInfo.trafficLimitGb} ГБ
             </p>
           )}
@@ -64,7 +64,7 @@ export function AddGbDialog({
               className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 cursor-pointer transition-colors ${
                 selectedPackageId === pkg.id
                   ? "border-blue-600 bg-blue-50/50 ring-1 ring-blue-600/30"
-                  : "border-gray-200 hover:bg-gray-50"
+                  : "border-coffee-latte/50 hover:bg-coffee-cappuccino/50"
               }`}
             >
               <div className="flex items-center gap-3">
@@ -75,9 +75,9 @@ export function AddGbDialog({
                   onChange={() => onSelectPackage(pkg.id)}
                   className="text-blue-600"
                 />
-                <span className="font-semibold text-gray-900">+{pkg.label}</span>
+                <span className="font-semibold text-coffee-espresso">+{pkg.label}</span>
               </div>
-              <span className="font-bold text-gray-900">{pkg.price} ₽</span>
+              <span className="font-bold text-coffee-espresso">{pkg.price} ₽</span>
             </label>
           ))}
         </div>
@@ -87,7 +87,7 @@ export function AddGbDialog({
             type="button"
             onClick={() => onOpenChange(false)}
             disabled={loading}
-            className="px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 disabled:opacity-50"
+            className="px-4 py-2.5 rounded-lg border border-coffee-latte text-coffee-espresso/80 font-medium hover:bg-coffee-cappuccino/50 disabled:opacity-50"
           >
             Отмена
           </button>

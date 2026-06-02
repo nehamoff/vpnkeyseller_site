@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import {
   Mail,
   Lock,
@@ -82,14 +82,14 @@ function InfoRow({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 bg-white/80 border border-gray-200 rounded-xl p-4">
+    <div className="flex items-center justify-between gap-4 bg-card border border-coffee-latte/50 shadow-coffee rounded-xl p-4">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
-          <Icon className="w-5 h-5 text-gray-600" />
+        <div className="w-10 h-10 rounded-xl bg-coffee-cappuccino/60 flex items-center justify-center shrink-0">
+          <Icon className="w-5 h-5 text-coffee-mocha" />
         </div>
         <div className="min-w-0">
-          <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-          <p className="text-gray-900 font-medium truncate">{value}</p>
+          <p className="text-xs text-coffee-mocha/90 mb-0.5">{label}</p>
+          <p className="text-coffee-espresso font-medium truncate">{value}</p>
         </div>
       </div>
       {action}
@@ -315,7 +315,7 @@ export function Dashboard() {
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto flex items-center justify-center py-24">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-coffee-mocha/90" />
       </div>
     );
   }
@@ -326,15 +326,15 @@ export function Dashboard() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Profile header card */}
-      <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200/50 p-8">
+      <div className="surface-card-lg backdrop-blur-xl rounded-3xl p-8">
         <div className="flex items-start justify-between gap-4 mb-8">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center text-white text-2xl font-semibold shadow-lg">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-coffee-espresso to-coffee-espresso/90 flex items-center justify-center text-white text-2xl font-semibold shadow-lg">
               {emailInitial}
             </div>
             <div>
-              <h2 className="text-2xl font-semibold text-gray-900">Личный кабинет</h2>
-              <p className="text-gray-500 text-sm mt-1">{displayName}</p>
+              <h2 className="text-2xl font-semibold text-coffee-espresso">Личный кабинет</h2>
+              <p className="text-coffee-mocha/90 text-sm mt-1">{displayName}</p>
             </div>
           </div>
 
@@ -345,7 +345,7 @@ export function Dashboard() {
                 setProfileError("");
                 setProfileSuccess("");
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-xl hover:shadow-lg transition-all shrink-0"
+              className="flex items-center gap-2 px-4 py-2 bg-coffee-espresso text-white rounded-xl hover:shadow-lg transition-all shrink-0"
             >
               <Edit2 className="w-4 h-4" />
               Редактировать
@@ -353,7 +353,7 @@ export function Dashboard() {
           ) : (
             <button
               onClick={() => setIsEditing(false)}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-xl hover:shadow-lg transition-all shrink-0"
+              className="flex items-center gap-2 px-4 py-2 bg-coffee-cappuccino text-coffee-espresso/80 rounded-xl hover:shadow-lg transition-all shrink-0"
             >
               <X className="w-4 h-4" />
               Готово
@@ -373,12 +373,12 @@ export function Dashboard() {
 
         {/* Security edit panel */}
         {isEditing && (
-          <div className="mt-6 pt-6 border-t border-gray-200">
+          <div className="mt-6 pt-6 border-t border-coffee-latte/50">
             <div className="flex items-center gap-2 mb-4">
-              <Shield className="w-5 h-5 text-gray-700" />
-              <h3 className="text-lg font-semibold text-gray-900">Безопасность аккаунта</h3>
+              <Shield className="w-5 h-5 text-coffee-espresso/80" />
+              <h3 className="text-lg font-semibold text-coffee-espresso">Безопасность аккаунта</h3>
             </div>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-coffee-mocha/90 mb-4">
               Управляйте данными аккаунта и привязками.
             </p>
 
@@ -386,36 +386,36 @@ export function Dashboard() {
               {hasRealEmail && (
                 <button
                   onClick={openEmailDialog}
-                  className="flex items-center justify-between gap-3 p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-400 hover:shadow-md transition-all text-left group"
+                  className="flex items-center justify-between gap-3 p-4 bg-card border border-coffee-latte/50 rounded-xl hover:border-coffee-mocha hover:shadow-md transition-all text-left group"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
                       <Mail className="w-5 h-5 text-blue-600" />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">Сменить Email</p>
-                      <p className="text-xs text-gray-500 mt-0.5">Подтверждение кодом</p>
+                      <p className="font-medium text-coffee-espresso">Сменить Email</p>
+                      <p className="text-xs text-coffee-mocha/90 mt-0.5">Подтверждение кодом</p>
                     </div>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-700 transition-colors" />
+                  <ChevronRight className="w-5 h-5 text-coffee-latte group-hover:text-coffee-espresso/80 transition-colors" />
                 </button>
               )}
 
               {hasRealEmail && (
                 <button
                   onClick={openPasswordDialog}
-                  className="flex items-center justify-between gap-3 p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-400 hover:shadow-md transition-all text-left group"
+                  className="flex items-center justify-between gap-3 p-4 bg-card border border-coffee-latte/50 rounded-xl hover:border-coffee-mocha hover:shadow-md transition-all text-left group"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
                       <KeyRound className="w-5 h-5 text-amber-600" />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">Сменить пароль</p>
-                      <p className="text-xs text-gray-500 mt-0.5">Уведомление на почту</p>
+                      <p className="font-medium text-coffee-espresso">Сменить пароль</p>
+                      <p className="text-xs text-coffee-mocha/90 mt-0.5">Уведомление на почту</p>
                     </div>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-700 transition-colors" />
+                  <ChevronRight className="w-5 h-5 text-coffee-latte group-hover:text-coffee-espresso/80 transition-colors" />
                 </button>
               )}
 
@@ -425,18 +425,18 @@ export function Dashboard() {
                     setTelegramLinkError("");
                     setTelegramDialogOpen(true);
                   }}
-                  className="flex items-center justify-between gap-3 p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-400 hover:shadow-md transition-all text-left group sm:col-span-2"
+                  className="flex items-center justify-between gap-3 p-4 bg-card border border-coffee-latte/50 rounded-xl hover:border-coffee-mocha hover:shadow-md transition-all text-left group sm:col-span-2"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center">
                       <Link2 className="w-5 h-5 text-sky-600" />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">Привязать Telegram</p>
-                      <p className="text-xs text-gray-500 mt-0.5">Для доступа к подпискам Remnawave</p>
+                      <p className="font-medium text-coffee-espresso">Привязать Telegram</p>
+                      <p className="text-xs text-coffee-mocha/90 mt-0.5">Для доступа к подпискам Remnawave</p>
                     </div>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-700 transition-colors" />
+                  <ChevronRight className="w-5 h-5 text-coffee-latte group-hover:text-coffee-espresso/80 transition-colors" />
                 </button>
               )}
             </div>
@@ -452,7 +452,7 @@ export function Dashboard() {
           if (!open) resetEmailDialog();
         }}
       >
-        <DialogContent className="sm:max-w-md bg-white/95 backdrop-blur-xl rounded-2xl">
+        <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-xl rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Mail className="w-5 h-5" />
@@ -472,22 +472,22 @@ export function Dashboard() {
             {emailStep === "form" ? (
               <>
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1.5">Текущий email</label>
-                  <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-600 text-sm">
+                  <label className="block text-sm text-coffee-espresso/80 mb-1.5">Текущий email</label>
+                  <div className="flex items-center gap-2 px-4 py-3 bg-coffee-cappuccino/40 border border-coffee-latte/50 rounded-xl text-coffee-mocha text-sm">
                     <User className="w-4 h-4 shrink-0" />
                     {email}
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1.5">Новый email</label>
+                  <label className="block text-sm text-coffee-espresso/80 mb-1.5">Новый email</label>
                   <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-coffee-latte" />
                     <input
                       type="email"
                       value={newEmail}
                       onChange={(e) => setNewEmail(e.target.value)}
-                      className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+                      className="w-full pl-11 pr-4 py-3 bg-card border border-coffee-latte/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-coffee-espresso/20"
                       placeholder="new@email.com"
                       autoFocus
                     />
@@ -495,14 +495,14 @@ export function Dashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1.5">Текущий пароль</label>
+                  <label className="block text-sm text-coffee-espresso/80 mb-1.5">Текущий пароль</label>
                   <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-coffee-latte" />
                     <input
                       type="password"
                       value={emailPassword}
                       onChange={(e) => setEmailPassword(e.target.value)}
-                      className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+                      className="w-full pl-11 pr-4 py-3 bg-card border border-coffee-latte/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-coffee-espresso/20"
                       placeholder="Для подтверждения"
                       autoComplete="current-password"
                     />
@@ -512,7 +512,7 @@ export function Dashboard() {
                 <button
                   onClick={handleRequestEmailChange}
                   disabled={savingEmail}
-                  className="w-full bg-gray-900 text-white py-3 rounded-xl hover:shadow-lg transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                  className="w-full bg-coffee-espresso text-white py-3 rounded-xl hover:shadow-lg transition-all disabled:opacity-60 flex items-center justify-center gap-2"
                 >
                   {savingEmail && <Loader2 className="w-4 h-4 animate-spin" />}
                   Отправить код
@@ -536,7 +536,7 @@ export function Dashboard() {
                 <button
                   onClick={handleVerifyEmailChange}
                   disabled={savingEmail || emailCode.length !== 6}
-                  className="w-full bg-gray-900 text-white py-3 rounded-xl hover:shadow-lg transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                  className="w-full bg-coffee-espresso text-white py-3 rounded-xl hover:shadow-lg transition-all disabled:opacity-60 flex items-center justify-center gap-2"
                 >
                   {savingEmail && <Loader2 className="w-4 h-4 animate-spin" />}
                   Подтвердить
@@ -550,7 +550,7 @@ export function Dashboard() {
                     setEmailSuccess("");
                     setEmailError("");
                   }}
-                  className="w-full text-sm text-gray-500 hover:text-gray-800 py-1"
+                  className="w-full text-sm text-coffee-mocha/90 hover:text-coffee-espresso py-1"
                 >
                   ← Вернуться к вводу email
                 </button>
@@ -568,7 +568,7 @@ export function Dashboard() {
           if (!open) resetPasswordDialog();
         }}
       >
-        <DialogContent className="sm:max-w-md bg-white/95 backdrop-blur-xl rounded-2xl">
+        <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-xl rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <KeyRound className="w-5 h-5" />
@@ -584,14 +584,14 @@ export function Dashboard() {
             {passwordError && <Alert type="error" message={passwordError} />}
 
             <div>
-              <label className="block text-sm text-gray-700 mb-1.5">Текущий пароль</label>
+              <label className="block text-sm text-coffee-espresso/80 mb-1.5">Текущий пароль</label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-coffee-latte" />
                 <input
                   type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+                  className="w-full pl-11 pr-4 py-3 bg-card border border-coffee-latte/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-coffee-espresso/20"
                   autoComplete="current-password"
                   autoFocus
                 />
@@ -599,14 +599,14 @@ export function Dashboard() {
             </div>
 
             <div>
-              <label className="block text-sm text-gray-700 mb-1.5">Новый пароль</label>
+              <label className="block text-sm text-coffee-espresso/80 mb-1.5">Новый пароль</label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-coffee-latte" />
                 <input
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+                  className="w-full pl-11 pr-4 py-3 bg-card border border-coffee-latte/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-coffee-espresso/20"
                   placeholder="Минимум 8 символов"
                   minLength={8}
                   autoComplete="new-password"
@@ -615,14 +615,14 @@ export function Dashboard() {
             </div>
 
             <div>
-              <label className="block text-sm text-gray-700 mb-1.5">Подтвердите пароль</label>
+              <label className="block text-sm text-coffee-espresso/80 mb-1.5">Подтвердите пароль</label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-coffee-latte" />
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+                  className="w-full pl-11 pr-4 py-3 bg-card border border-coffee-latte/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-coffee-espresso/20"
                   autoComplete="new-password"
                 />
               </div>
@@ -631,7 +631,7 @@ export function Dashboard() {
             <button
               onClick={handleChangePassword}
               disabled={savingPassword}
-              className="w-full bg-gray-900 text-white py-3 rounded-xl hover:shadow-lg transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+              className="w-full bg-coffee-espresso text-white py-3 rounded-xl hover:shadow-lg transition-all disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {savingPassword && <Loader2 className="w-4 h-4 animate-spin" />}
               Сохранить пароль
@@ -648,7 +648,7 @@ export function Dashboard() {
           if (!open) setTelegramLinkError("");
         }}
       >
-        <DialogContent className="sm:max-w-md bg-white/95 backdrop-blur-xl rounded-2xl">
+        <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-xl rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Send className="w-5 h-5" />
@@ -663,8 +663,8 @@ export function Dashboard() {
             {telegramLinkError && <Alert type="error" message={telegramLinkError} />}
             <div className="relative min-h-[48px] flex items-center justify-center">
               {telegramLinkLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-xl z-10">
-                  <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
+                <div className="absolute inset-0 flex items-center justify-center surface-card rounded-xl z-10">
+                  <Loader2 className="w-5 h-5 animate-spin text-coffee-mocha" />
                 </div>
               )}
               <TelegramLoginWidget botUsername={TELEGRAM_BOT} onAuth={handleLinkTelegram} />
@@ -674,29 +674,29 @@ export function Dashboard() {
       </Dialog>
 
       {/* Subscriptions from Remnawave */}
-      <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200/50 p-8">
+      <div className="surface-card-lg backdrop-blur-xl rounded-3xl p-8">
         <div className="flex items-center gap-3 mb-6">
-          <History className="w-6 h-6 text-gray-700" />
-          <h2 className="text-2xl font-semibold text-gray-900">Активные подписки</h2>
+          <History className="w-6 h-6 text-coffee-espresso/80" />
+          <h2 className="text-2xl font-semibold text-coffee-espresso">Активные подписки</h2>
         </div>
 
         {subscriptionsLoading ? (
           <div className="flex justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
+            <Loader2 className="w-6 h-6 animate-spin text-coffee-mocha/90" />
           </div>
         ) : !telegramLinked ? (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-coffee-mocha/90">
             <Send className="w-10 h-10 mx-auto mb-3 opacity-40" />
             <p>Привяжите Telegram, чтобы видеть подписки</p>
             <button
               onClick={() => setIsEditing(true)}
-              className="mt-4 text-sm text-gray-900 font-medium hover:underline"
+              className="mt-4 text-sm text-coffee-espresso font-medium hover:underline"
             >
               Перейти к настройкам
             </button>
           </div>
         ) : subscriptions.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-coffee-mocha/90">
             <p>Активных подписок не найдено</p>
             {!remnawaveConfigured && (
               <p className="text-xs mt-2 text-amber-600">Remnawave API не настроен на сервере</p>
@@ -711,12 +711,12 @@ export function Dashboard() {
               return (
                 <div
                   key={String(sub.uuid ?? sub.id ?? index)}
-                  className="flex items-center justify-between bg-white/80 border border-gray-200 rounded-xl p-4"
+                  className="flex items-center justify-between bg-card border border-coffee-latte/50 shadow-coffee rounded-xl p-4"
                 >
                   <div>
-                    <h3 className="font-semibold text-gray-900">{name}</h3>
+                    <h3 className="font-semibold text-coffee-espresso">{name}</h3>
                     {expires && (
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-coffee-mocha">
                         до {formatDate(String(expires))}
                       </p>
                     )}
@@ -730,27 +730,27 @@ export function Dashboard() {
       </div>
 
       {/* Purchase history (mock) */}
-      <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200/50 p-8">
+      <div className="surface-card-lg backdrop-blur-xl rounded-3xl p-8">
         <div className="flex items-center gap-3 mb-6">
-          <History className="w-6 h-6 text-gray-700" />
-          <h2 className="text-2xl font-semibold text-gray-900">История покупок</h2>
+          <History className="w-6 h-6 text-coffee-espresso/80" />
+          <h2 className="text-2xl font-semibold text-coffee-espresso">История покупок</h2>
         </div>
 
         <div className="space-y-3">
           {mockPurchases.map((purchase) => (
             <div
               key={purchase.id}
-              className="flex items-center justify-between bg-white/80 border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all"
+              className="flex items-center justify-between bg-card border border-coffee-latte/50 shadow-coffee rounded-xl p-4 hover:shadow-md transition-all"
             >
               <div>
-                <h3 className="font-semibold text-gray-900">{purchase.plan}</h3>
-                <p className="text-sm text-gray-600">{purchase.date}</p>
+                <h3 className="font-semibold text-coffee-espresso">{purchase.plan}</h3>
+                <p className="text-sm text-coffee-mocha">{purchase.date}</p>
               </div>
               <div className="text-right">
-                <p className="font-semibold text-gray-900">{purchase.amount}</p>
+                <p className="font-semibold text-coffee-espresso">{purchase.amount}</p>
                 <p
                   className={`text-sm ${
-                    purchase.status === "Активен" ? "text-green-600" : "text-gray-500"
+                    purchase.status === "Активен" ? "text-green-600" : "text-coffee-mocha/90"
                   }`}
                 >
                   {purchase.status}

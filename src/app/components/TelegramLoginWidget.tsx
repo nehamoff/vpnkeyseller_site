@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+﻿import { useEffect, useRef } from "react";
 
 export interface TelegramAuthData {
   id: number;
@@ -54,7 +54,7 @@ export function TelegramLoginWidget({ botUsername, onAuth, className }: Telegram
 
   if (!botUsername) {
     return (
-      <p className="text-sm text-gray-500 text-center py-2">
+      <p className="text-sm text-coffee-mocha/90 text-center py-2">
         Telegram-бот не настроен (TELEGRAM_BOT_USERNAME)
       </p>
     );

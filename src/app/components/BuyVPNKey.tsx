@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+﻿import { useState, useRef } from "react";
 import { Loader2, ShoppingCart, Check, AlertCircle } from "lucide-react";
 import { purchasesAPI } from "../../lib/purchases-api";
 import { PurchaseCheckoutDialog, type CheckoutPackage } from "./purchase/PurchaseCheckoutDialog";
@@ -139,8 +139,8 @@ export function BuyVPNKey() {
             />
 
             <div className="text-center mb-4">
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Выберите тариф</h2>
-                <p className="text-gray-600">
+                <h2 className="text-3xl font-bold text-coffee-espresso mb-2">Выберите тариф</h2>
+                <p className="text-coffee-mocha">
                     Оплата {PAYMENT_CHARGE_RUB} ₽ через ЮKassa · ключи в разделе «Мои ключи»
                 </p>
             </div>
@@ -159,10 +159,10 @@ export function BuyVPNKey() {
                 {PACKAGES.map((pkg) => (
                     <div
                         key={pkg.id}
-                        className={`relative rounded-2xl overflow-hidden transition-all bg-white ${
+                        className={`relative rounded-2xl overflow-hidden transition-all bg-card ${
                             pkg.popular
                                 ? "ring-2 ring-blue-500 shadow-xl md:scale-[1.02]"
-                                : "border border-gray-200 shadow-sm"
+                                : "border border-coffee-latte/50 shadow-sm"
                         }`}
                     >
                         {pkg.popular && (
@@ -175,15 +175,15 @@ export function BuyVPNKey() {
                         </div>
 
                         <div className="p-8 pt-10">
-                            <h3 className="text-xl font-bold text-gray-900 mb-2">{pkg.name}</h3>
+                            <h3 className="text-xl font-bold text-coffee-espresso mb-2">{pkg.name}</h3>
                             <div className="mb-6">
-                                <span className="text-4xl font-bold text-gray-900">{pkg.price}</span>
-                                <span className="text-gray-600 ml-2">₽ / {pkg.periodLabel}</span>
+                                <span className="text-4xl font-bold text-coffee-espresso">{pkg.price}</span>
+                                <span className="text-coffee-mocha ml-2">₽ / {pkg.periodLabel}</span>
                             </div>
 
                             <ul className="space-y-3 mb-8">
                                 {pkg.features.map((feature, idx) => (
-                                    <li key={idx} className="flex items-center gap-3 text-gray-700 text-sm">
+                                    <li key={idx} className="flex items-center gap-3 text-coffee-espresso/80 text-sm">
                                         <Check className="w-4 h-4 text-blue-600 shrink-0" />
                                         {feature}
                                     </li>
@@ -200,7 +200,7 @@ export function BuyVPNKey() {
                                 className={`w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all ${
                                     pkg.popular
                                         ? "bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50"
-                                        : "bg-gray-100 hover:bg-gray-200 text-gray-900 disabled:opacity-50"
+                                        : "bg-coffee-cappuccino/60 hover:bg-coffee-cappuccino text-coffee-espresso disabled:opacity-50"
                                 }`}
                             >
                                 <ShoppingCart className="w-4 h-4" />

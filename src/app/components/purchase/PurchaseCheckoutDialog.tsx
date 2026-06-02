@@ -1,4 +1,4 @@
-import {
+﻿import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -44,25 +44,25 @@ export function PurchaseCheckoutDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 space-y-3">
+        <div className="rounded-xl border border-coffee-latte/50 bg-coffee-cappuccino/40 p-4 space-y-3">
           <div className="flex justify-between gap-4">
-            <span className="text-gray-600">Тариф</span>
-            <span className="font-semibold text-gray-900 text-right">{pkg.name}</span>
+            <span className="text-coffee-mocha">Тариф</span>
+            <span className="font-semibold text-coffee-espresso text-right">{pkg.name}</span>
           </div>
           <div className="flex justify-between gap-4">
-            <span className="text-gray-600">Срок</span>
-            <span className="font-medium text-gray-900">{pkg.periodLabel}</span>
+            <span className="text-coffee-mocha">Срок</span>
+            <span className="font-medium text-coffee-espresso">{pkg.periodLabel}</span>
           </div>
           <div className="flex justify-between gap-4 text-sm">
-            <span className="text-gray-500">Цена тарифа</span>
-            <span className="text-gray-500 line-through">{pkg.price} ₽</span>
+            <span className="text-coffee-mocha/90">Цена тарифа</span>
+            <span className="text-coffee-mocha/90 line-through">{pkg.price} ₽</span>
           </div>
-          <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
-            <span className="font-medium text-gray-900 flex items-center gap-2">
+          <div className="border-t border-coffee-latte/50 pt-3 flex justify-between items-center">
+            <span className="font-medium text-coffee-espresso flex items-center gap-2">
               <CreditCard className="h-4 w-4" />
               К оплате сейчас
             </span>
-            <span className="text-2xl font-bold text-gray-900">{PAYMENT_CHARGE_RUB} ₽</span>
+            <span className="text-2xl font-bold text-coffee-espresso">{PAYMENT_CHARGE_RUB} ₽</span>
           </div>
         </div>
 
@@ -79,7 +79,7 @@ export function PurchaseCheckoutDialog({
             type="button"
             onClick={() => onOpenChange(false)}
             disabled={loading}
-            className="px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 disabled:opacity-50"
+            className="px-4 py-2.5 rounded-lg border border-coffee-latte text-coffee-espresso/80 font-medium hover:bg-coffee-cappuccino/50 disabled:opacity-50"
           >
             Отмена
           </button>
@@ -87,7 +87,7 @@ export function PurchaseCheckoutDialog({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="px-5 py-2.5 rounded-lg bg-gray-900 text-white font-semibold hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2 min-w-[140px]"
+            className="px-5 py-2.5 rounded-lg bg-coffee-espresso text-white font-semibold hover:bg-coffee-espresso disabled:opacity-50 flex items-center justify-center gap-2 min-w-[140px]"
           >
             {loading ? (
               <>

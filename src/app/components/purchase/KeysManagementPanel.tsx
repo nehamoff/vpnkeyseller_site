@@ -1,4 +1,4 @@
-import { Calendar, Check, Copy, ExternalLink, HardDrive, RefreshCw } from "lucide-react";
+﻿import { Calendar, Check, Copy, ExternalLink, HardDrive, RefreshCw } from "lucide-react";
 import type { Purchase } from "../../../lib/purchases-api";
 import { KeyDevicesSection } from "./KeyDevicesSection";
 
@@ -54,15 +54,15 @@ export function KeysManagementPanel({
     <section aria-labelledby="keys-heading" className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
-          <h2 id="keys-heading" className="text-2xl md:text-3xl font-bold text-gray-900">
+          <h2 id="keys-heading" className="text-2xl md:text-3xl font-bold text-coffee-espresso">
             Ваши ключи
           </h2>
-          <p className="text-gray-600 text-sm mt-1">
+          <p className="text-coffee-mocha text-sm mt-1">
             Управление подписками и продление. Остаток подписки переносится на следующий месяц;
             докупленные ГБ сохраняются в лимите, пока не будут израсходованы.
           </p>
         </div>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-coffee-mocha/90">
           {hasRemna ? remnaKeys.length : activePurchases.length}{" "}
           {(hasRemna ? remnaKeys.length : activePurchases.length) === 1 ? "ключ" : "ключа"}
         </p>
@@ -137,14 +137,14 @@ function TrafficBar({
   percent: number;
 }) {
   return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 md:p-4">
+    <div className="rounded-xl border border-coffee-cappuccino/60 bg-coffee-cappuccino/40 p-3 md:p-4">
       <div className="flex flex-wrap justify-between gap-2 text-xs mb-2">
-        <span className="font-medium text-gray-700">Трафик</span>
-        <span className="text-gray-500">
+        <span className="font-medium text-coffee-espresso/80">Трафик</span>
+        <span className="text-coffee-mocha/90">
           {usedGb} ГБ из {limitGb} ГБ · осталось {leftoverGb} ГБ
         </span>
       </div>
-      <div className="h-2.5 rounded-full bg-gray-200 overflow-hidden">
+      <div className="h-2.5 rounded-full bg-coffee-cappuccino overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${
             percent >= 90 ? "bg-red-500" : percent >= 70 ? "bg-amber-500" : "bg-emerald-500"
@@ -191,13 +191,13 @@ function KeyCard({
 }) {
   return (
     <article
-      className={`rounded-2xl border p-5 md:p-6 bg-white/70 backdrop-blur-sm shadow-sm transition-shadow hover:shadow-md ${
-        expired ? "border-red-200/60 bg-red-50/20" : "border-gray-200/80"
+      className={`rounded-2xl border p-5 md:p-6 surface-card backdrop-blur-sm transition-shadow hover:shadow-coffee-lg ${
+        expired ? "border-red-200/60 bg-red-50/20" : "border-coffee-latte/60"
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
-          <h3 className="text-lg font-semibold text-gray-900 truncate">{title}</h3>
+          <h3 className="text-lg font-semibold text-coffee-espresso truncate">{title}</h3>
           {isTelegramKey && (
             <span className="text-xs font-semibold bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full">
               Telegram
@@ -230,7 +230,7 @@ function KeyCard({
               type="button"
               onClick={onRenew}
               disabled={renewDisabled}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-coffee-latte bg-card text-sm font-medium text-coffee-espresso hover:bg-coffee-cappuccino/50 disabled:opacity-50"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               Продлить
@@ -240,7 +240,7 @@ function KeyCard({
       </div>
 
       {expireLabel && (
-        <div className="flex items-center gap-2 text-sm text-gray-600 mb-3">
+        <div className="flex items-center gap-2 text-sm text-coffee-mocha mb-3">
           <Calendar className="w-4 h-4 shrink-0" />
           <span>{expireLabel}</span>
         </div>
@@ -253,22 +253,22 @@ function KeyCard({
       )}
 
       {subscriptionUrl && (
-        <div className="p-3 md:p-4 bg-gray-50 rounded-xl border border-gray-100">
-          <p className="text-xs font-medium text-gray-500 mb-2">{copyLabel}</p>
+        <div className="p-3 md:p-4 bg-coffee-cappuccino/40 rounded-xl border border-coffee-cappuccino/60">
+          <p className="text-xs font-medium text-coffee-mocha/90 mb-2">{copyLabel}</p>
           <div className="flex items-start gap-2">
-            <code className="text-xs md:text-sm font-mono text-gray-900 flex-1 break-all leading-relaxed">
+            <code className="text-xs md:text-sm font-mono text-coffee-espresso flex-1 break-all leading-relaxed">
               {subscriptionUrl}
             </code>
             <button
               type="button"
               onClick={() => onCopy(subscriptionUrl, copyId)}
-              className="p-2.5 rounded-lg bg-white border border-gray-200 hover:bg-gray-100 transition-colors shrink-0"
+              className="p-2.5 rounded-lg bg-card border border-coffee-latte/50 hover:bg-coffee-cappuccino/70 transition-colors shrink-0"
               title="Скопировать"
             >
               {copiedId === copyId ? (
                 <Check className="w-4 h-4 text-emerald-600" />
               ) : (
-                <Copy className="w-4 h-4 text-gray-600" />
+                <Copy className="w-4 h-4 text-coffee-mocha" />
               )}
             </button>
           </div>

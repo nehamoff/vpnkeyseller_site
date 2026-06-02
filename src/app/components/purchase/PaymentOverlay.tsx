@@ -1,4 +1,4 @@
-import { AlertCircle, CreditCard, Loader2, ShieldCheck, Sparkles, XCircle } from "lucide-react";
+﻿import { AlertCircle, CreditCard, Loader2, ShieldCheck, Sparkles, XCircle } from "lucide-react";
 import { PAYMENT_CHARGE_RUB } from "./purchase-constants";
 
 export type PaymentOverlayVariant = "redirect" | "confirm" | "creating";
@@ -42,7 +42,7 @@ export function PaymentOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-coffee-espresso/50 backdrop-blur-sm p-4"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="payment-overlay-title"
@@ -58,21 +58,21 @@ export function PaymentOverlay({
               Идёт оплата
             </p>
             {packageName && (
-              <p className="text-sm font-medium text-gray-900 truncate mt-0.5">{packageName}</p>
+              <p className="text-sm font-medium text-coffee-espresso truncate mt-0.5">{packageName}</p>
             )}
             <p className="text-xs text-amber-900/70 mt-0.5">Сумма: {PAYMENT_CHARGE_RUB} ₽</p>
           </div>
         </div>
 
         <div className="text-center mb-5">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/80 border border-amber-200/60">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-card/90 border border-amber-200/60">
             <Icon className="h-7 w-7 text-amber-900" />
           </div>
           <Loader2 className="mx-auto h-9 w-9 animate-spin text-amber-900 mb-3" />
-          <h2 id="payment-overlay-title" className="text-lg font-bold text-gray-900 mb-1.5">
+          <h2 id="payment-overlay-title" className="text-lg font-bold text-coffee-espresso mb-1.5">
             {title}
           </h2>
-          <p className="text-sm text-gray-600 leading-relaxed px-1">{subtitle}</p>
+          <p className="text-sm text-coffee-mocha leading-relaxed px-1">{subtitle}</p>
         </div>
 
         {canCancel && (

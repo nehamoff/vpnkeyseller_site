@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+﻿import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Loader2,
   ShoppingCart,
@@ -472,8 +472,8 @@ export function MyKeys() {
   if (loading && !overlay) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
-        <p className="text-sm text-gray-500">Загружаем ключи и подписки…</p>
+        <Loader2 className="w-8 h-8 animate-spin text-coffee-mocha" />
+        <p className="text-sm text-coffee-mocha/90">Загружаем ключи и подписки…</p>
       </div>
     );
   }
@@ -543,14 +543,14 @@ export function MyKeys() {
             )}
             <div className="relative min-h-[48px] flex items-center justify-center">
               {telegramLinkLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-xl z-10">
-                  <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
+                <div className="absolute inset-0 flex items-center justify-center bg-card/90 rounded-xl z-10">
+                  <Loader2 className="w-5 h-5 animate-spin text-coffee-mocha" />
                 </div>
               )}
               {TELEGRAM_BOT ? (
                 <TelegramLoginWidget botUsername={TELEGRAM_BOT} onAuth={handleLinkTelegram} />
               ) : (
-                <p className="text-sm text-gray-500 text-center">
+                <p className="text-sm text-coffee-mocha/90 text-center">
                   Виджет Telegram не настроен (VITE_TELEGRAM_BOT_USERNAME)
                 </p>
               )}
@@ -561,10 +561,10 @@ export function MyKeys() {
 
       {/* Заголовок страницы */}
       <header>
-        <h1 className="text-3xl font-bold text-gray-900">
+        <h1 className="text-3xl font-bold text-coffee-espresso">
           {hasManagedKeys ? "Мои ключи" : "Подключение VPN"}
         </h1>
-        <p className="text-gray-600 mt-2 text-sm md:text-base">
+        <p className="text-coffee-mocha mt-2 text-sm md:text-base">
           {hasManagedKeys
             ? "Управляйте подписками и копируйте ссылки для клиента"
             : "Выберите тариф и получите первый ключ за пару минут"}
@@ -610,8 +610,8 @@ export function MyKeys() {
               <Send className="h-5 w-5 text-blue-700" />
             </div>
             <div>
-              <p className="font-semibold text-gray-900">Есть ключ в Telegram-боте?</p>
-              <p className="text-sm text-gray-600 mt-0.5">
+              <p className="font-semibold text-coffee-espresso">Есть ключ в Telegram-боте?</p>
+              <p className="text-sm text-coffee-mocha mt-0.5">
                 Привяжите Telegram — ключ из бота появится здесь с синей меткой.
               </p>
             </div>
@@ -651,19 +651,19 @@ export function MyKeys() {
           />
 
           {user && (
-            <details className="rounded-xl border border-gray-200/60 bg-gray-50/30 text-sm">
-              <summary className="cursor-pointer px-4 py-3 text-gray-600 font-medium">
+            <details className="rounded-xl border border-coffee-latte/50 bg-coffee-cappuccino/30 text-sm">
+              <summary className="cursor-pointer px-4 py-3 text-coffee-mocha font-medium">
                 Данные аккаунта
               </summary>
-              <div className="px-4 pb-4 pt-0 grid md:grid-cols-2 gap-3 border-t border-gray-200/50">
+              <div className="px-4 pb-4 pt-0 grid md:grid-cols-2 gap-3 border-t border-coffee-latte/40">
                 <div className="flex items-center gap-2">
-                  <Mail className="w-4 h-4 text-gray-500" />
-                  <span className="text-gray-900">{user.email}</span>
+                  <Mail className="w-4 h-4 text-coffee-mocha/90" />
+                  <span className="text-coffee-espresso">{user.email}</span>
                 </div>
                 {user.telegram_username && (
                   <div className="flex items-center gap-2">
-                    <Send className="w-4 h-4 text-gray-500" />
-                    <span className="text-gray-900">@{user.telegram_username}</span>
+                    <Send className="w-4 h-4 text-coffee-mocha/90" />
+                    <span className="text-coffee-espresso">@{user.telegram_username}</span>
                   </div>
                 )}
               </div>
@@ -673,24 +673,24 @@ export function MyKeys() {
       ) : (
         <>
           {user && (
-            <div className="bg-gradient-to-r from-gray-100/40 to-gray-50/40 backdrop-blur-xl rounded-2xl border border-gray-200/50 p-5 md:p-6">
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            <div className="bg-gradient-to-r from-coffee-cappuccino/50 to-coffee-milk/50 backdrop-blur-xl rounded-2xl border border-coffee-latte/40 p-5 md:p-6">
+              <h3 className="text-sm font-semibold text-coffee-mocha/90 uppercase tracking-wide mb-3">
                 Аккаунт
               </h3>
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="flex items-center gap-3">
-                  <Mail className="w-5 h-5 text-gray-600 flex-shrink-0" />
+                  <Mail className="w-5 h-5 text-coffee-mocha flex-shrink-0" />
                   <div>
-                    <p className="text-xs text-gray-500">Email</p>
-                    <p className="font-medium text-gray-900">{user.email}</p>
+                    <p className="text-xs text-coffee-mocha/90">Email</p>
+                    <p className="font-medium text-coffee-espresso">{user.email}</p>
                   </div>
                 </div>
                 {user.telegram_username && (
                   <div className="flex items-center gap-3">
-                    <Send className="w-5 h-5 text-gray-600 flex-shrink-0" />
+                    <Send className="w-5 h-5 text-coffee-mocha flex-shrink-0" />
                     <div>
-                      <p className="text-xs text-gray-500">Telegram</p>
-                      <p className="font-medium text-gray-900">@{user.telegram_username}</p>
+                      <p className="text-xs text-coffee-mocha/90">Telegram</p>
+                      <p className="font-medium text-coffee-espresso">@{user.telegram_username}</p>
                     </div>
                   </div>
                 )}
@@ -706,9 +706,9 @@ export function MyKeys() {
           />
 
           {!hasPendingPayment && (
-            <div className="text-center py-10 rounded-2xl border border-dashed border-gray-300 bg-gray-50/40">
-              <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-600 text-sm max-w-xs mx-auto">
+            <div className="text-center py-10 rounded-2xl border border-dashed border-coffee-latte bg-coffee-cappuccino/40">
+              <ShoppingCart className="w-10 h-10 text-coffee-latte mx-auto mb-3" />
+              <p className="text-coffee-mocha text-sm max-w-xs mx-auto">
                 После оплаты здесь появится ключ — его можно будет скопировать одним нажатием
               </p>
             </div>
