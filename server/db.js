@@ -111,4 +111,17 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_purchases_status ON purchases(status);
     CREATE INDEX IF NOT EXISTS idx_purchases_payment_id ON purchases(yookassa_payment_id);
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS subscription_expiry_reminders (
+      id SERIAL PRIMARY KEY,
+      purchase_id INTEGER NOT NULL REFERENCES purchases(id) ON DELETE CASCADE,
+      reminder_kind VARCHAR(8) NOT NULL,
+      expires_on DATE NOT NULL,
+      sent_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+      UNIQUE (purchase_id, reminder_kind, expires_on)
+    );
+    CREATE INDEX IF NOT EXISTS idx_subscription_expiry_reminders_purchase
+      ON subscription_expiry_reminders(purchase_id);
+  `);
 }

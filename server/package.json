@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "reminders": "node -e \"import('./subscription-reminders.js').then(m => m.runSubscriptionExpiryReminders()).then(r => { console.log(r); process.exit(0); }).catch(e => { console.error(e); process.exit(1); })\""
   },
   "dependencies": {
     "@remnawave/backend-contract": "^2.8.2",

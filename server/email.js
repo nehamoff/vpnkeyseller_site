@@ -114,6 +114,89 @@ export async function sendPasswordChangedNotification(email) {
   });
 }
 
+function getMyKeysRenewUrl() {
+  const raw = process.env.FRONTEND_URL || "http://127.0.0.1:5173";
+  const base = raw.split(",")[0].trim().replace(/\/$/, "");
+  return `${base}/my-keys`;
+}
+
+function formatExpiryDateRu(expiresAt) {
+  return new Date(expiresAt).toLocaleString("ru-RU", {
+    timeZone: "Europe/Moscow",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/**
+ * @param {{ email: string, packageName: string, expiresAt: Date | string, daysLeft: 0 | 1 | 3 }} params
+ */
+export async function sendSubscriptionExpiringSoonEmail({
+  email,
+  packageName,
+  expiresAt,
+  daysLeft,
+}) {
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const appName = process.env.APP_NAME || "Кофемания VPN";
+  const renewUrl = getMyKeysRenewUrl();
+  const expiryLabel = formatExpiryDateRu(expiresAt);
+
+  let lead;
+  if (daysLeft === 0) {
+    lead = "Сегодня заканчивается срок действия вашей VPN-подписки.";
+  } else if (daysLeft === 1) {
+    lead = "Завтра заканчивается срок действия вашей VPN-подписки.";
+  } else {
+    lead = "Через 3 дня заканчивается срок действия вашей VPN-подписки.";
+  }
+
+  const subject = `Ваша подписка скоро закончится — ${appName}`;
+  const text = `${lead}
+
+Тариф: ${packageName}
+Окончание: ${expiryLabel} (МСК)
+
+Продлите подписку, чтобы не потерять доступ:
+${renewUrl}
+
+Если вы уже продлили подписку, проигнорируйте это письмо.`;
+
+  const html = `
+    <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; color: #3d1c1c;">
+      <h2 style="color: #3d1c1c; margin: 0 0 16px;">Ваша подписка скоро закончится</h2>
+      <p style="color: #5c4030; line-height: 1.5;">${lead}</p>
+      <div style="background: #faf4ef; border: 1px solid #e8ddd0; border-radius: 12px; padding: 16px; margin: 20px 0;">
+        <p style="margin: 0 0 8px;"><strong>Тариф:</strong> ${packageName}</p>
+        <p style="margin: 0;"><strong>Окончание:</strong> ${expiryLabel} (МСК)</p>
+      </div>
+      <p style="color: #5c4030; line-height: 1.5;">Продлите подписку заранее — доступ к VPN сохранится без перерыва.</p>
+      <p style="margin: 28px 0;">
+        <a href="${renewUrl}"
+           style="display: inline-block; background: #3d1c1c; color: #ede0d8; text-decoration: none;
+                  padding: 14px 28px; border-radius: 12px; font-weight: 600; font-size: 16px;">
+          Продлить подписку
+        </a>
+      </p>
+      <p style="color: #998675; font-size: 12px; margin-top: 24px;">
+        Если вы уже продлили подписку, это письмо можно проигнорировать.<br/>
+        ${appName}
+      </p>
+    </div>
+  `;
+
+  await getTransporter().sendMail({
+    from,
+    to: email,
+    subject,
+    text,
+    html,
+  });
+}
+
 export async function verifySmtpConnection() {
   await getTransporter().verify();
 }

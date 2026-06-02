@@ -6,6 +6,7 @@ import { initDb, pool } from "./db.js";
 import authRoutes from "./routes/auth.js";
 import telegramRoutes from "./routes/telegram.js";
 import purchasesRoutes from "./routes/purchases.js";
+import { startSubscriptionReminderScheduler } from "./subscription-reminders.js";
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
@@ -67,6 +68,7 @@ async function start() {
 
   app.listen(port, () => {
     console.log(`API server running on http://localhost:${port}`);
+    startSubscriptionReminderScheduler();
   });
 }
 
