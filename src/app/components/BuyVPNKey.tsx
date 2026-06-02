@@ -72,20 +72,21 @@ export function BuyVPNKey() {
             redirectTimerRef.current = null;
         }
 
-        if (activePurchaseId == null) {
+        const purchaseId = activePurchaseId ?? purchasesAPI.getPendingPurchaseId();
+        if (purchaseId == null) {
             setOverlay(null);
             return;
         }
 
         setCancelOverlayLoading(true);
+
         try {
-            await purchasesAPI.cancel(activePurchaseId);
+            await purchasesAPI.cancel(purchaseId);
             purchasesAPI.clearPendingPurchaseId();
             setOverlay(null);
             setActivePurchaseId(null);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Не удалось отменить платёж");
-            setOverlay(null);
         } finally {
             setCancelOverlayLoading(false);
         }

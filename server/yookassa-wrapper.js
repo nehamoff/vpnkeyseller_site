@@ -3,59 +3,21 @@
  * Calls Python integration module to manage payments
  */
 
-import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
+import { executePythonScript } from "./python-exec.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/**
- * Execute Python command and return parsed JSON result
- * @param {string[]} args - Python script arguments
- * @returns {Promise<object>} - Parsed JSON response
- */
-function executePython(args) {
-    return new Promise((resolve, reject) => {
-        const scriptPath = path.join(__dirname, "yookassa_integration.py");
-        console.log(`[YooKassa] Executing: python ${scriptPath} ${args.join(" ")}`);
+const YOOKASSA_SCRIPT = path.join(__dirname, "yookassa_integration.py");
+const YOOKASSA_TIMEOUT_MS = Number(process.env.YOOKASSA_PYTHON_TIMEOUT_MS || 18000);
+const YOOKASSA_CANCEL_TIMEOUT_MS = Number(process.env.YOOKASSA_CANCEL_TIMEOUT_MS || 10000);
 
-        const pythonProcess = spawn("python", [scriptPath, ...args], {
-            env: { ...process.env },
-            stdio: ["pipe", "pipe", "pipe"]
-        });
-
-        let stdout = "";
-        let stderr = "";
-
-        pythonProcess.stdout.on("data", (data) => {
-            stdout += data.toString();
-        });
-
-        pythonProcess.stderr.on("data", (data) => {
-            stderr += data.toString();
-            console.error("[YooKassa stderr]", data.toString());
-        });
-
-        pythonProcess.on("close", (code) => {
-            console.log(`[YooKassa] Process exited with code ${code}`);
-            console.log(`[YooKassa full stderr] ${stderr}`);
-
-            try {
-                const result = JSON.parse(stdout);
-                if (code === 0 && result.success) {
-                    resolve(result);
-                } else {
-                    reject(new Error(result.error || `Process exited with code ${code}`));
-                }
-            } catch (e) {
-                reject(new Error(`Failed to parse Python output: ${e.message}`));
-            }
-        });
-
-        pythonProcess.on("error", (error) => {
-            reject(new Error(`Failed to spawn Python process: ${error.message}`));
-        });
+function executePython(args, options = {}) {
+    return executePythonScript(YOOKASSA_SCRIPT, args, {
+        timeoutMs: options.timeoutMs ?? YOOKASSA_TIMEOUT_MS,
+        logPrefix: options.logPrefix ?? "[YooKassa]",
     });
 }
 
@@ -99,11 +61,12 @@ export async function createPayment(orderId, email, amount = 1.0, returnUrl = nu
  * @param {string} paymentId - YooKassa payment ID
  * @returns {Promise<{success: boolean, status?: string, paid?: boolean, error?: string}>}
  */
-export async function getPaymentStatus(paymentId) {
+export async function getPaymentStatus(paymentId, options = {}) {
+    const timeoutMs = options.timeoutMs ?? Math.min(YOOKASSA_TIMEOUT_MS, 10000);
     try {
         console.log(`[Payment] Getting status for payment: ${paymentId}`);
 
-        const result = await executePython(["status", paymentId]);
+        const result = await executePython(["status", paymentId], { timeoutMs });
 
         return {
             success: true,
@@ -111,7 +74,8 @@ export async function getPaymentStatus(paymentId) {
             status: result.status,
             paid: result.paid,
             amount: result.amount,
-            data: result.data
+            confirmation_url: result.data?.confirmation_url,
+            data: result.data,
         };
     } catch (error) {
         console.error("Failed to get payment status:", error.message);
@@ -127,23 +91,39 @@ export async function getPaymentStatus(paymentId) {
  * @param {string} paymentId - YooKassa payment ID
  * @returns {Promise<{success: boolean, status?: string, error?: string}>}
  */
-export async function cancelPayment(paymentId) {
+export async function cancelPayment(paymentId, options = {}) {
+    const timeoutMs = options.timeoutMs ?? YOOKASSA_CANCEL_TIMEOUT_MS;
     try {
         console.log(`[Payment] Cancelling payment: ${paymentId}`);
 
-        const result = await executePython(["cancel", paymentId]);
+        const result = await executePython(["cancel", paymentId], {
+            timeoutMs,
+            logPrefix: "[YooKassa]",
+        });
 
         return {
             success: true,
             payment_id: result.payment_id,
             status: result.status,
-            data: result.data
+            data: result.data,
         };
     } catch (error) {
         console.error("Failed to cancel payment:", error.message);
         return {
             success: false,
-            error: error.message
+            error: error.message,
         };
     }
+}
+
+/** Отмена в ЮKassa без блокировки HTTP-ответа */
+export function scheduleYookassaCancel(paymentId) {
+    if (!paymentId) return;
+    setImmediate(() => {
+        cancelPayment(paymentId).then((r) => {
+            if (!r.success) {
+                console.warn(`[Payment] background cancel ${paymentId}: ${r.error}`);
+            }
+        });
+    });
 }

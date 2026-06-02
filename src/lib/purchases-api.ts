@@ -97,16 +97,24 @@ export interface PurchasesListResponse {
     purchases: Purchase[];
 }
 
-class PurchaseError extends Error {
+export class PurchaseError extends Error {
     status: number;
+    code?: string;
 
-    constructor(message: string, status: number) {
+    constructor(message: string, status: number, code?: string) {
         super(message);
         this.status = status;
+        this.code = code;
     }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+const REQUEST_TIMEOUT_MS = 25000;
+
+async function request<T>(
+    path: string,
+    options: RequestInit = {},
+    timeoutMs: number = REQUEST_TIMEOUT_MS
+): Promise<T> {
     const token = localStorage.getItem("vpn_token");
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -120,10 +128,27 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const fullUrl = `${API_BASE}${path}`;
     console.log(`[API] ${options.method || "GET"} ${fullUrl}`, options.body ? JSON.parse(options.body as string) : "");
 
-    const response = await fetch(fullUrl, {
-        ...options,
-        headers,
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    let response: Response;
+    try {
+        response = await fetch(fullUrl, {
+            ...options,
+            headers,
+            signal: controller.signal,
+        });
+    } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+            throw new PurchaseError(
+                "Сервер не ответил вовремя. Если заказ появился в «Ожидает оплаты» — нажмите «Продолжить оплату».",
+                408
+            );
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeoutId);
+    }
 
     const data = await response.json().catch(() => ({}));
 
@@ -131,7 +156,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
     if (!response.ok) {
         const message = typeof data.error === "string" ? data.error : `Error ${response.status}`;
-        throw new PurchaseError(message, response.status);
+        const code = typeof data.code === "string" ? data.code : undefined;
+        throw new PurchaseError(message, response.status, code);
     }
 
     return data as T;
@@ -236,6 +262,34 @@ export const purchasesAPI = {
         return localStorage.getItem(PENDING_PAYMENT_URL_KEY);
     },
 
+    async getPaymentUrl(purchaseId: number) {
+        return request<{ purchase_id: number; confirmation_url: string; payment_status: string }>(
+            `/purchases/${purchaseId}/payment-url`
+        );
+    },
+
+    /**
+     * Открывает страницу оплаты: localStorage → API (ссылка из БД/ЮKassa).
+     */
+    async resumePayment(purchaseId: number): Promise<boolean> {
+        const storedId = this.getPendingPurchaseId();
+        const localUrl = this.getPendingPaymentUrl();
+        if (storedId === purchaseId && localUrl) {
+            window.location.href = localUrl;
+            return true;
+        }
+
+        try {
+            const data = await this.getPaymentUrl(purchaseId);
+            if (!data.confirmation_url) return false;
+            this.setPendingPayment(purchaseId, data.confirmation_url);
+            window.location.href = data.confirmation_url;
+            return true;
+        } catch {
+            return false;
+        }
+    },
+
     goToPendingPayment(purchaseId?: number) {
         if (purchaseId != null) {
             localStorage.setItem(PENDING_PURCHASE_KEY, String(purchaseId));
@@ -258,9 +312,11 @@ export const purchasesAPI = {
     },
 
     async cancel(purchaseId: number) {
-        return request<{ message: string; purchase: Purchase }>(`/purchases/${purchaseId}/cancel`, {
-            method: "POST",
-        });
+        return request<{ message: string; purchase: Purchase }>(
+            `/purchases/${purchaseId}/cancel`,
+            { method: "POST" },
+            12000
+        );
     },
 
     getPendingPurchaseId(): number | null {
