@@ -5,7 +5,6 @@ import {
   AlertCircle,
   Mail,
   Send,
-  Sparkles,
   Download,
   Smartphone,
 } from "lucide-react";
@@ -27,6 +26,11 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { ApiError } from "../../lib/api";
+import { toast } from "sonner";
+
+function showSuccessToast(message: string) {
+  toast.success("Готово!", { description: message, duration: 5000 });
+}
 import bannerAppDownload from "../../../photo/appdownload.png";
 import bannerTgNative from "../../../photo/tgnative.png";
 
@@ -71,7 +75,6 @@ export function MyKeys() {
   const [remnaKeys, setRemnaKeys] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const [checkoutPkg, setCheckoutPkg] = useState<PricingPackage | null>(null);
@@ -144,16 +147,16 @@ export function MyKeys() {
           if (confirmed?.purchase) {
             const type = confirmed.purchase.purchase_type;
             if (type === "gb_topup") {
-              setSuccess(
+              showSuccessToast(
                 `Добавлено ${confirmed.purchase.gb_amount ?? "—"} ГБ к ключу. Трафик увеличен до оплаты исчерпания.`
               );
             } else if (type === "renewal") {
-              setSuccess(
+              showSuccessToast(
                 `Подписка продлена (${confirmed.purchase.package_name}). Дата обновлена в Remnawave.`
               );
             } else {
-              setSuccess(
-                `Ключ «${confirmed.purchase.package_name}» активирован. Скопируйте ссылку подписки ниже.`
+              showSuccessToast(
+                `Оплата подтверждена. Ключ «${confirmed.purchase.package_name}» готов.`
               );
             }
           }
@@ -228,7 +231,7 @@ export function MyKeys() {
 
       setOverlay(null);
       setActivePurchaseId(null);
-      setSuccess(`Ключ «${checkoutPkg.name}» активирован.`);
+      showSuccessToast(`Ключ «${checkoutPkg.name}» активирован.`);
       await refreshRemnaKeys();
     } catch (err) {
       setOverlay(null);
@@ -251,13 +254,13 @@ export function MyKeys() {
       );
       const type = result.purchase.purchase_type;
       if (type === "gb_topup") {
-        setSuccess(
+        showSuccessToast(
           `Добавлено ${result.purchase.gb_amount ?? "—"} ГБ. Лимит ключа увеличен.`
         );
       } else if (type === "renewal") {
-        setSuccess(`Подписка продлена (${result.purchase.package_name}).`);
+        showSuccessToast(`Подписка продлена (${result.purchase.package_name}).`);
       } else {
-        setSuccess(`Оплата подтверждена. Ключ «${result.purchase.package_name}» готов.`);
+        showSuccessToast(`Оплата подтверждена. Ключ «${result.purchase.package_name}» готов.`);
       }
       await refreshRemnaKeys();
     } catch (err) {
@@ -305,8 +308,7 @@ export function MyKeys() {
       setPurchases((prev) => prev.filter((p) => p.id !== purchaseId));
       setOverlay(null);
       setActivePurchaseId(null);
-      setSuccess(`Заказ «${result.purchase.package_name}» отменён.`);
-      window.setTimeout(() => setSuccess(null), 5000);
+      showSuccessToast(`Заказ «${result.purchase.package_name}» отменён.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось отменить платёж");
     } finally {
@@ -361,7 +363,7 @@ export function MyKeys() {
       }
 
       setOverlay(null);
-      setSuccess(`Ключ продлён на ${pkg.periodLabel}.`);
+      showSuccessToast(`Ключ продлён на ${pkg.periodLabel}.`);
       await refreshRemnaKeys();
     } catch (err) {
       setOverlay(null);
@@ -413,7 +415,7 @@ export function MyKeys() {
       }
 
       setOverlay(null);
-      setSuccess(`Добавлено ${result.gb ?? ""} ГБ к ключу.`);
+      showSuccessToast(`Добавлено ${result.gb ?? ""} ГБ к ключу.`);
       await refreshRemnaKeys();
     } catch (err) {
       setOverlay(null);
@@ -430,7 +432,7 @@ export function MyKeys() {
     try {
       const result = await authApi.linkTelegram(data);
       setUser(result.user);
-      setSuccess(
+      showSuccessToast(
         "Telegram привязан. Если в боте был ключ — он появится в списке с меткой Telegram."
       );
       setTelegramDialogOpen(false);
@@ -636,19 +638,6 @@ export function MyKeys() {
           <div>
             <h3 className="font-semibold text-red-900">Что-то пошло не так</h3>
             <p className="text-sm text-red-700 mt-0.5">{error}</p>
-          </div>
-        </div>
-      )}
-
-      {success && (
-        <div
-          className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex gap-3"
-          role="status"
-        >
-          <Sparkles className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-semibold text-emerald-900">Готово!</h3>
-            <p className="text-sm text-emerald-800 mt-0.5">{success}</p>
           </div>
         </div>
       )}
