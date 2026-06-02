@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate } from "react-router";
 import { Root } from "./components/Root";
 import { Login } from "./components/Login";
 import { Register } from "./components/Register";
@@ -15,6 +15,10 @@ export const router = createBrowserRouter([
   {
     path: "/register",
     Component: Register,
+  },
+  {
+    path: "/payment/return",
+    element: <Navigate to="/my-keys?payment=return" replace />,
   },
   {
     path: "/",

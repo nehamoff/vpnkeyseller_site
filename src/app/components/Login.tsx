@@ -2,16 +2,22 @@
 import { useNavigate } from "react-router";
 import { Mail, Lock, Loader2 } from "lucide-react";
 import { Logo } from "./Logo";
-import { authApi, saveSession, ApiError } from "../../lib/api";
+import {
+  authApi,
+  saveSession,
+  ApiError,
+  consumePostAuthRedirect,
+  getPaymentReturnPath,
+} from "../../lib/api";
+import { purchasesAPI } from "../../lib/purchases-api";
 
 export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [resendLoading, setResendLoading] = useState(false);
-  const [resendSuccess, setResendSuccess] = useState(false);
   const navigate = useNavigate();
+  const pendingPaymentReturn = Boolean(purchasesAPI.getPendingPurchaseId());
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,32 +27,14 @@ export function Login() {
     try {
       const result = await authApi.login(email, password);
       saveSession(result.token, result.user.email);
-      navigate("/");
+      const redirectTo = consumePostAuthRedirect(
+        pendingPaymentReturn ? getPaymentReturnPath() : "/"
+      );
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Ошибка входа");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleResendCode = async () => {
-    if (!email) {
-      setError("Введите email для отправки кода подтверждения");
-      return;
-    }
-
-    setResendLoading(true);
-    setError("");
-    setResendSuccess(false);
-
-    try {
-      await authApi.resendCode(email);
-      setResendSuccess(true);
-      setTimeout(() => setResendSuccess(false), 5000);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось отправить код");
-    } finally {
-      setResendLoading(false);
     }
   };
 
@@ -66,6 +54,12 @@ export function Login() {
 
         <div className="surface-card-lg backdrop-blur-xl rounded-3xl p-8">
           <h2 className="text-2xl font-semibold text-coffee-espresso mb-6">Вход</h2>
+
+          {pendingPaymentReturn && (
+            <p className="text-sm text-coffee-mocha bg-coffee-cappuccino/50 border border-coffee-latte/50 rounded-xl px-4 py-3 mb-4">
+              Вы вернулись с оплаты. Войдите — откроем «Мои ключи» и активируем подписку.
+            </p>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -102,12 +96,6 @@ export function Login() {
               <p className="text-sm text-red-600 bg-red-50 px-4 py-2 rounded-lg">{error}</p>
             )}
 
-            {resendSuccess && (
-              <p className="text-sm text-green-600 bg-green-50 px-4 py-2 rounded-lg">
-                Код подтверждения отправлен на ваш email
-              </p>
-            )}
-
             <button
               type="submit"
               disabled={loading}
@@ -115,16 +103,6 @@ export function Login() {
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               Войти
-            </button>
-
-            <button
-              type="button"
-              onClick={handleResendCode}
-              disabled={resendLoading}
-              className="w-full mt-2 bg-coffee-cappuccino text-coffee-espresso py-3 rounded-xl hover:bg-coffee-latte transition-all disabled:opacity-60 flex items-center justify-center gap-2 text-sm"
-            >
-              {resendLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-              Отправить код подтверждения
             </button>
           </form>
 

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router";
 import { Menu, X, User, Key, Info, LogOut } from "lucide-react";
 import { Logo } from "./Logo";
-import { authApi, clearSession } from "../../lib/api";
+import { authApi, clearSession, getPaymentReturnPath, setPostAuthRedirect } from "../../lib/api";
 
 export function Root() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -12,10 +12,15 @@ export function Root() {
 
   useEffect(() => {
     const token = localStorage.getItem("vpn_token");
+    const returnPath = `${location.pathname}${location.search}`;
+    const isPaymentReturn = new URLSearchParams(location.search).get("payment") === "return";
 
     if (!token) {
+      if (isPaymentReturn || location.pathname === "/my-keys") {
+        setPostAuthRedirect(isPaymentReturn ? returnPath : getPaymentReturnPath());
+      }
       clearSession();
-      navigate("/login");
+      navigate("/login", { replace: true });
       return;
     }
 
@@ -24,10 +29,13 @@ export function Root() {
       .then(() => setIsAuthenticated(true))
       .catch((err) => {
         console.error("Auth verification failed:", err);
+        if (isPaymentReturn || location.pathname === "/my-keys") {
+          setPostAuthRedirect(isPaymentReturn ? returnPath : getPaymentReturnPath());
+        }
         clearSession();
-        navigate("/login");
+        navigate("/login", { replace: true });
       });
-  }, [navigate]);
+  }, [navigate, location.pathname, location.search]);
 
   const handleLogout = () => {
     clearSession();
@@ -45,10 +53,10 @@ export function Root() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-coffee-milk via-coffee-cappuccino/40 to-coffee-latte/30 relative overflow-hidden">
+    <div className="min-h-screen bg-background relative overflow-hidden">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 -left-20 w-96 h-96 bg-coffee-milk/50 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 -right-20 w-96 h-96 bg-coffee-mocha/15 rounded-full blur-3xl" />
+        <div className="absolute top-20 -left-20 w-96 h-96 bg-coffee-cappuccino/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 -right-20 w-96 h-96 bg-coffee-latte/25 rounded-full blur-3xl" />
       </div>
 
       {isSidebarOpen && (
@@ -59,7 +67,7 @@ export function Root() {
       )}
 
       <aside
-        className={`fixed top-0 left-0 h-full w-72 surface-glass border-r border-coffee-latte/40 shadow-coffee-xl z-50 transform transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 left-0 h-full w-72 bg-background/95 backdrop-blur-md border-r border-border z-50 transform transition-transform duration-300 ease-in-out ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0`}
       >
@@ -112,7 +120,7 @@ export function Root() {
       </aside>
 
       <div className="lg:ml-72 min-h-screen">
-        <header className="surface-glass border-b border-coffee-latte/40 sticky top-0 z-30">
+        <header className="bg-background/95 backdrop-blur-md border-b border-border sticky top-0 z-30">
           <div className="px-6 py-4 flex items-center justify-between">
             <button
               onClick={() => setIsSidebarOpen(true)}

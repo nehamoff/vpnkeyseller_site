@@ -3,7 +3,6 @@ import {
   Mail,
   Lock,
   Send,
-  History,
   Edit2,
   X,
   Loader2,
@@ -33,22 +32,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import bannerTg from "../../../photo/bannertg.png";
 
 const TELEGRAM_BOT = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "";
-
-interface Purchase {
-  id: string;
-  plan: string;
-  date: string;
-  amount: string;
-  status: string;
-}
-
-const mockPurchases: Purchase[] = [
-  { id: "1", plan: "Базовый", date: "2026-05-15", amount: "299 ₽", status: "Активен" },
-  { id: "2", plan: "Стандарт", date: "2026-04-10", amount: "599 ₽", status: "Завершен" },
-  { id: "3", plan: "Премиум", date: "2026-03-05", amount: "999 ₽", status: "Завершен" },
-];
+const TELEGRAM_BOT_BANNER_URL = "https://t.me/coffemaniaVPNbot?start=17";
 
 function formatDate(dateString: string) {
   return new Date(dateString).toLocaleDateString("ru-RU", {
@@ -111,10 +98,6 @@ export function Dashboard() {
   const [telegramLabel, setTelegramLabel] = useState("Не подключен");
   const [hasRealEmail, setHasRealEmail] = useState(true);
 
-  const [subscriptions, setSubscriptions] = useState<Record<string, unknown>[]>([]);
-  const [subscriptionsLoading, setSubscriptionsLoading] = useState(false);
-  const [remnawaveConfigured, setRemnawaveConfigured] = useState(false);
-
   const [newEmail, setNewEmail] = useState("");
   const [emailPassword, setEmailPassword] = useState("");
   const [emailCode, setEmailCode] = useState("");
@@ -156,26 +139,12 @@ export function Dashboard() {
       );
     });
 
-  const loadSubscriptions = () => {
-    setSubscriptionsLoading(true);
-    return authApi
-      .subscriptions()
-      .then((data) => {
-        setRemnawaveConfigured(data.configured);
-        setSubscriptions(data.subscriptions);
-      })
-      .catch(() => setSubscriptions([]))
-      .finally(() => setSubscriptionsLoading(false));
-  };
-
   useEffect(() => {
     loadProfile()
       .catch((err) => {
         setProfileError(err instanceof ApiError ? err.message : "Не удалось загрузить профиль");
       })
       .finally(() => setLoading(false));
-
-    loadSubscriptions();
   }, []);
 
   const resetEmailDialog = () => {
@@ -302,7 +271,6 @@ export function Dashboard() {
       const result = await authApi.linkTelegram(data);
       saveSession(localStorage.getItem("vpn_token") || "", getUserDisplayName(result.user));
       await loadProfile();
-      await loadSubscriptions();
       setProfileSuccess(result.message);
       setTelegramDialogOpen(false);
     } catch (err) {
@@ -673,93 +641,21 @@ export function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Subscriptions from Remnawave */}
-      <div className="surface-card-lg backdrop-blur-xl rounded-3xl p-8">
-        <div className="flex items-center gap-3 mb-6">
-          <History className="w-6 h-6 text-coffee-espresso/80" />
-          <h2 className="text-2xl font-semibold text-coffee-espresso">Активные подписки</h2>
-        </div>
-
-        {subscriptionsLoading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-coffee-mocha/90" />
-          </div>
-        ) : !telegramLinked ? (
-          <div className="text-center py-8 text-coffee-mocha/90">
-            <Send className="w-10 h-10 mx-auto mb-3 opacity-40" />
-            <p>Привяжите Telegram, чтобы видеть подписки</p>
-            <button
-              onClick={() => setIsEditing(true)}
-              className="mt-4 text-sm text-coffee-espresso font-medium hover:underline"
-            >
-              Перейти к настройкам
-            </button>
-          </div>
-        ) : subscriptions.length === 0 ? (
-          <div className="text-center py-8 text-coffee-mocha/90">
-            <p>Активных подписок не найдено</p>
-            {!remnawaveConfigured && (
-              <p className="text-xs mt-2 text-amber-600">Remnawave API не настроен на сервере</p>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {subscriptions.map((sub, index) => {
-              const name = String(sub.username ?? sub.name ?? sub.plan ?? `Подписка ${index + 1}`);
-              const status = String(sub.status ?? sub.state ?? "—");
-              const expires = sub.expireAt ?? sub.expires_at ?? sub.expire_at;
-              return (
-                <div
-                  key={String(sub.uuid ?? sub.id ?? index)}
-                  className="flex items-center justify-between bg-card border border-coffee-latte/50 shadow-coffee rounded-xl p-4"
-                >
-                  <div>
-                    <h3 className="font-semibold text-coffee-espresso">{name}</h3>
-                    {expires && (
-                      <p className="text-sm text-coffee-mocha">
-                        до {formatDate(String(expires))}
-                      </p>
-                    )}
-                  </div>
-                  <span className="text-sm font-medium text-green-600">{status}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Purchase history (mock) */}
-      <div className="surface-card-lg backdrop-blur-xl rounded-3xl p-8">
-        <div className="flex items-center gap-3 mb-6">
-          <History className="w-6 h-6 text-coffee-espresso/80" />
-          <h2 className="text-2xl font-semibold text-coffee-espresso">История покупок</h2>
-        </div>
-
-        <div className="space-y-3">
-          {mockPurchases.map((purchase) => (
-            <div
-              key={purchase.id}
-              className="flex items-center justify-between bg-card border border-coffee-latte/50 shadow-coffee rounded-xl p-4 hover:shadow-md transition-all"
-            >
-              <div>
-                <h3 className="font-semibold text-coffee-espresso">{purchase.plan}</h3>
-                <p className="text-sm text-coffee-mocha">{purchase.date}</p>
-              </div>
-              <div className="text-right">
-                <p className="font-semibold text-coffee-espresso">{purchase.amount}</p>
-                <p
-                  className={`text-sm ${
-                    purchase.status === "Активен" ? "text-green-600" : "text-coffee-mocha/90"
-                  }`}
-                >
-                  {purchase.status}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <a
+        href={TELEGRAM_BOT_BANNER_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group block rounded-3xl overflow-hidden border border-coffee-latte/40 shadow-coffee-lg hover:shadow-coffee-xl hover:border-coffee-mocha/30 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coffee-espresso focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        aria-label="Открыть Telegram-бот Кофемания VPN"
+      >
+        <img
+          src={bannerTg}
+          alt="Пользуйся нами в Телеграм — новости, поддержка и обновления в боте @coffemaniaVPNbot"
+          className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-[1.01]"
+          loading="lazy"
+          decoding="async"
+        />
+      </a>
     </div>
   );
 }

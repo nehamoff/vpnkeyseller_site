@@ -5,7 +5,13 @@
 
 import * as React from "react";
 
+import { getPaymentReturnPath, setPostAuthRedirect } from "./api";
+
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
+
+function getPaymentReturnUrl(): string {
+  return new URL(getPaymentReturnPath(), window.location.origin).href;
+}
 
 export interface Purchase {
     id: number;
@@ -150,6 +156,7 @@ export const purchasesAPI = {
                 username,
                 user_uuid: userUuid,
                 package_id: packageId,
+                return_url: getPaymentReturnUrl(),
             }),
         });
 
@@ -179,6 +186,7 @@ export const purchasesAPI = {
                 package_name: packageName,
                 days_count: daysCount,
                 price: price ?? null,
+                return_url: getPaymentReturnUrl(),
             }),
         });
 
@@ -204,6 +212,7 @@ export const purchasesAPI = {
                 package_name: packageName,
                 price: price ?? null,
                 days_count: daysCount,
+                return_url: getPaymentReturnUrl(),
             }),
         });
 
@@ -220,6 +229,7 @@ export const purchasesAPI = {
     setPendingPayment(purchaseId: number, confirmationUrl: string) {
         localStorage.setItem(PENDING_PURCHASE_KEY, String(purchaseId));
         localStorage.setItem(PENDING_PAYMENT_URL_KEY, confirmationUrl);
+        setPostAuthRedirect(getPaymentReturnPath());
     },
 
     getPendingPaymentUrl(): string | null {

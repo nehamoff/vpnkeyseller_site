@@ -23,6 +23,77 @@ const PURCHASE_FIELDS = `id, user_id, package_name, price, days_count, gb_amount
   remnawave_inbound_id, remnawave_username, purchase_type,
   yookassa_payment_id, payment_status, status`;
 
+function normalizeOrigin(value) {
+    try {
+        const url = new URL(value.includes("://") ? value : `http://${value}`);
+        return url.origin;
+    } catch {
+        return null;
+    }
+}
+
+function getAllowedReturnOrigins() {
+    const raw = [process.env.FRONTEND_URL, process.env.ALLOWED_RETURN_ORIGINS]
+        .filter(Boolean)
+        .join(",");
+    const origins = new Set();
+    for (const part of raw.split(",")) {
+        const trimmed = part.trim().replace(/\/$/, "");
+        if (!trimmed) continue;
+        const origin = normalizeOrigin(trimmed);
+        if (origin) origins.add(origin);
+    }
+    if (origins.size === 0) {
+        origins.add("http://127.0.0.1:5173");
+    }
+    return origins;
+}
+
+/** URL возврата после ЮKassa — всегда /my-keys?payment=return на разрешённом origin. */
+function resolvePaymentReturnUrl(req) {
+    if (process.env.YOOKASSA_RETURN_URL) {
+        const configured = process.env.YOOKASSA_RETURN_URL.trim();
+        if (configured.includes("payment=return")) {
+            return configured;
+        }
+        return `${configured}${configured.includes("?") ? "&" : "?"}payment=return`;
+    }
+
+    const allowed = getAllowedReturnOrigins();
+    const candidates = [];
+
+    if (typeof req.body?.return_url === "string" && req.body.return_url.trim()) {
+        candidates.push(req.body.return_url.trim());
+    }
+
+    const originHeader = req.get("origin");
+    if (originHeader) {
+        try {
+            const u = new URL("/my-keys", originHeader);
+            u.searchParams.set("payment", "return");
+            candidates.push(u.toString());
+        } catch {
+            /* ignore */
+        }
+    }
+
+    for (const candidate of candidates) {
+        try {
+            const url = new URL(candidate);
+            const path = url.pathname.replace(/\/$/, "") || "/";
+            if (path !== "/my-keys") continue;
+            if (!allowed.has(url.origin)) continue;
+            url.searchParams.set("payment", "return");
+            return url.toString();
+        } catch {
+            /* ignore */
+        }
+    }
+
+    const base = [...allowed][0];
+    return `${base}/my-keys?payment=return`;
+}
+
 /** Проверяет, что ключ Remnawave принадлежит пользователю. */
 async function getAccountRemnaKeys(userId) {
     const userResult = await pool.query(
@@ -44,6 +115,31 @@ async function getAccountRemnaKeys(userId) {
     return { email, telegramId, rawKeys };
 }
 
+/** Ключи с сайта — только при активной покупке; ключи из Telegram-бота — всегда. */
+async function filterKeysForUser(userId, rawKeys) {
+    const result = await pool.query(
+        `SELECT remnawave_inbound_id, remnawave_username
+         FROM purchases
+         WHERE user_id = $1 AND status = 'active' AND remnawave_inbound_id IS NOT NULL`,
+        [userId]
+    );
+
+    const paidUuids = new Set();
+    const paidUsernames = new Set();
+    for (const row of result.rows) {
+        if (row.remnawave_inbound_id) paidUuids.add(row.remnawave_inbound_id);
+        if (row.remnawave_username) paidUsernames.add(row.remnawave_username);
+    }
+
+    return rawKeys.filter((key) => {
+        if (key.keySource === "telegram") return true;
+        const uuid = key.uuid || key.id;
+        if (uuid && paidUuids.has(uuid)) return true;
+        if (key.username && paidUsernames.has(key.username)) return true;
+        return false;
+    });
+}
+
 function hwidLookupOptions(owned) {
     const key = owned.key;
     const isTelegram = key.keySource === "telegram";
@@ -60,7 +156,8 @@ async function assertOwnedRemnaKey(userId, username) {
         return account;
     }
 
-    const key = account.rawKeys.find((k) => k.username === username);
+    const visibleKeys = await filterKeysForUser(userId, account.rawKeys);
+    const key = visibleKeys.find((k) => k.username === username);
     if (!key) {
         return { error: { status: 403, message: "Ключ не принадлежит вашему аккаунту" } };
     }
@@ -286,13 +383,10 @@ router.post("/", async (req, res) => {
 
         const email = userResult.rows[0].email;
         const orderId = `vpn-${userId}-${Date.now()}`;
-        const returnUrl =
-            (process.env.YOOKASSA_RETURN_URL ||
-                `${(process.env.FRONTEND_URL || "http://127.0.0.1:5173").replace(/\/$/, "")}/my-keys`) +
-            `?payment=return`;
+        const returnUrl = resolvePaymentReturnUrl(req);
 
         console.log(
-            `[Purchase] Payment ${PAYMENT_AMOUNT_RUB}₽ for ${email}, order ${orderId} (catalog price ${price ?? "—"}₽)`
+            `[Purchase] Payment ${PAYMENT_AMOUNT_RUB}₽ for ${email}, order ${orderId} (catalog price ${price ?? "—"}₽), return ${returnUrl}`
         );
 
         const paymentResult = await createPayment(orderId, email, PAYMENT_AMOUNT_RUB, returnUrl);
@@ -593,10 +687,7 @@ router.post("/keys/add-gb", async (req, res) => {
         const email = owned.email;
         const keyUuid = user_uuid || owned.key.uuid;
         const orderId = `gb-${userId}-${Date.now()}`;
-        const returnUrl =
-            (process.env.YOOKASSA_RETURN_URL ||
-                `${(process.env.FRONTEND_URL || "http://127.0.0.1:5173").replace(/\/$/, "")}/my-keys`) +
-            `?payment=return`;
+        const returnUrl = resolvePaymentReturnUrl(req);
 
         const paymentResult = await createPayment(orderId, email, pkg.price, returnUrl);
 
@@ -674,10 +765,7 @@ router.post("/keys/renew", async (req, res) => {
         const email = owned.email;
         const keyUuid = user_uuid || owned.key.uuid;
         const orderId = `renew-${userId}-${Date.now()}`;
-        const returnUrl =
-            (process.env.YOOKASSA_RETURN_URL ||
-                `${(process.env.FRONTEND_URL || "http://127.0.0.1:5173").replace(/\/$/, "")}/my-keys`) +
-            `?payment=return`;
+        const returnUrl = resolvePaymentReturnUrl(req);
 
         const paymentResult = await createPayment(
             orderId,
@@ -833,7 +921,8 @@ router.get("/remnawave/keys", async (req, res) => {
             return res.status(account.error.status).json({ error: account.error.message });
         }
 
-        const keys = account.rawKeys.map(mapRemnawaveKey);
+        const visibleKeys = await filterKeysForUser(userId, account.rawKeys);
+        const keys = visibleKeys.map(mapRemnawaveKey);
 
         res.json({ success: true, keys });
     } catch (error) {

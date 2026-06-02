@@ -179,6 +179,28 @@ export const authApi = {
   },
 };
 
+export const AUTH_REDIRECT_KEY = "vpn_auth_redirect";
+
+/** Путь возврата после оплаты ЮKassa (относительный). */
+export function getPaymentReturnPath(): string {
+  return "/my-keys?payment=return";
+}
+
+export function setPostAuthRedirect(path: string) {
+  if (path.startsWith("/") && !path.startsWith("//")) {
+    sessionStorage.setItem(AUTH_REDIRECT_KEY, path);
+  }
+}
+
+export function consumePostAuthRedirect(fallback = "/"): string {
+  const path = sessionStorage.getItem(AUTH_REDIRECT_KEY);
+  sessionStorage.removeItem(AUTH_REDIRECT_KEY);
+  if (path && path.startsWith("/") && !path.startsWith("//")) {
+    return path;
+  }
+  return fallback;
+}
+
 export function saveSession(token: string, email: string) {
   localStorage.setItem("vpn_token", token);
   localStorage.setItem("vpn_authenticated", "true");

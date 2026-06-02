@@ -54,7 +54,7 @@ class YooKassaAPI:
         self.return_url = (
             os.getenv("YOOKASSA_RETURN_URL")
             or os.getenv("FRONTEND_URL", "http://127.0.0.1:5173").rstrip("/")
-            + "/my-keys"
+            + "/my-keys?payment=return"
         )
 
         if not self.account_id or not self.secret_key:

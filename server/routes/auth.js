@@ -149,21 +149,6 @@ router.post("/verify", async (req, res) => {
 
     const user = userResult.rows[0];
 
-    // Создаем VPN ключ в ремнавейв панели (первый ключ для нового пользователя)
-    const vpnResult = await createVpnUser(email, 1, 30);
-    if (vpnResult.success && vpnResult.user_uuid) {
-      // Сохраняем ID инбаунда в БД
-      await pool.query(
-        `UPDATE users SET remnawave_inbound_id = $1, vpn_key_created_at = NOW()
-         WHERE id = $2`,
-        [vpnResult.user_uuid, user.id],
-      );
-      console.log(`VPN key created for user ${email}: ${vpnResult.user_uuid} (${vpnResult.username})`);
-    } else {
-      console.warn(`Failed to create VPN key for user ${email}: ${vpnResult.error}`);
-      // Не блокируем регистрацию если ремнавейв недоступен
-    }
-
     const token = signToken(user);
 
     res.json({

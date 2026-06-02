@@ -7,7 +7,14 @@ import {
   InputOTPGroup,
   InputOTPSlot,
 } from "./ui/input-otp";
-import { authApi, saveSession, ApiError } from "../../lib/api";
+import {
+  authApi,
+  saveSession,
+  ApiError,
+  consumePostAuthRedirect,
+  getPaymentReturnPath,
+} from "../../lib/api";
+import { purchasesAPI } from "../../lib/purchases-api";
 
 type Step = "form" | "verify";
 
@@ -19,7 +26,6 @@ export function Register() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(0);
   const navigate = useNavigate();
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -56,36 +62,12 @@ export function Register() {
     try {
       const result = await authApi.verify(email, code);
       saveSession(result.token, result.user.email);
-      navigate("/");
+      const redirectTo = consumePostAuthRedirect(
+        purchasesAPI.getPendingPurchaseId() ? getPaymentReturnPath() : "/my-keys"
+      );
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Ошибка подтверждения");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResend = async () => {
-    if (resendCooldown > 0) return;
-    setError("");
-
-    setLoading(true);
-    try {
-      await authApi.resendCode(email);
-      setResendCooldown(60);
-      const interval = setInterval(() => {
-        setResendCooldown((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 429) {
-        setResendCooldown(60);
-      }
-      setError(err instanceof ApiError ? err.message : "Не удалось отправить код");
     } finally {
       setLoading(false);
     }
@@ -220,18 +202,6 @@ export function Register() {
                   Подтвердить
                 </button>
               </form>
-
-              <p className="text-center mt-6 text-sm text-coffee-mocha">
-                Не получили код?{" "}
-                <button
-                  type="button"
-                  onClick={handleResend}
-                  disabled={loading || resendCooldown > 0}
-                  className="text-coffee-espresso font-semibold hover:underline disabled:opacity-50"
-                >
-                  {resendCooldown > 0 ? `Отправить снова (${resendCooldown}с)` : "Отправить снова"}
-                </button>
-              </p>
             </>
           )}
 

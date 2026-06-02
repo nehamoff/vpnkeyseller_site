@@ -6,6 +6,8 @@ import {
   Mail,
   Send,
   Sparkles,
+  Download,
+  Smartphone,
 } from "lucide-react";
 import { authApi, type UserProfile } from "../../lib/api";
 import { purchasesAPI, type Purchase, type RemnaKey } from "../../lib/purchases-api";
@@ -25,8 +27,13 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { ApiError } from "../../lib/api";
+import bannerAppDownload from "../../../photo/appdownload.png";
+import bannerTgNative from "../../../photo/tgnative.png";
 
 const TELEGRAM_BOT = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "";
+const TELEGRAM_BOT_BANNER_URL = "https://t.me/coffemaniaVPNbot?start=17";
+const ANDROID_APK_URL =
+  "https://github.com/canawa/vpn_client/releases/download/beta-release/coffeemaniavpn.apk";
 
 const PRICING_PACKAGES: PricingPackage[] = [
   {
@@ -91,6 +98,8 @@ export function MyKeys() {
   const [telegramDialogOpen, setTelegramDialogOpen] = useState(false);
   const [telegramLinkError, setTelegramLinkError] = useState("");
   const [telegramLinkLoading, setTelegramLinkLoading] = useState(false);
+
+  const [appDownloadDialogOpen, setAppDownloadDialogOpen] = useState(false);
 
   const hasPendingPayment = useMemo(
     () => purchases.some((p) => p.status === "awaiting_payment"),
@@ -559,17 +568,67 @@ export function MyKeys() {
         </DialogContent>
       </Dialog>
 
-      {/* Заголовок страницы */}
-      <header>
-        <h1 className="text-3xl font-bold text-coffee-espresso">
-          {hasManagedKeys ? "Мои ключи" : "Подключение VPN"}
-        </h1>
-        <p className="text-coffee-mocha mt-2 text-sm md:text-base">
-          {hasManagedKeys
-            ? "Управляйте подписками и копируйте ссылки для клиента"
-            : "Выберите тариф и получите первый ключ за пару минут"}
-        </p>
-      </header>
+      <Dialog open={appDownloadDialogOpen} onOpenChange={setAppDownloadDialogOpen}>
+        <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-xl rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-coffee-espresso">
+              <Smartphone className="w-5 h-5" />
+              Приложение на Android
+            </DialogTitle>
+            <DialogDescription>
+              Установите официальное приложение Кофемания VPN — быстрое подключение и удобное
+              управление ключами на смартфоне.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="pt-2">
+            <a
+              href={ANDROID_APK_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-coffee-espresso px-5 py-3 text-sm font-semibold text-coffee-milk shadow-coffee-lg transition-colors hover:bg-coffee-espresso/90"
+            >
+              <Download className="w-5 h-5" />
+              Скачать APK
+            </a>
+            <p className="mt-3 text-center text-xs text-coffee-mocha/90">
+              При установке разрешите загрузку из неизвестных источников в настройках Android.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {hasManagedKeys ? (
+        <button
+          type="button"
+          onClick={() => setAppDownloadDialogOpen(true)}
+          className="group w-full rounded-3xl overflow-hidden border border-coffee-latte/40 shadow-coffee-lg hover:shadow-coffee-xl hover:border-coffee-mocha/30 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coffee-espresso focus-visible:ring-offset-2 focus-visible:ring-offset-background text-left"
+          aria-label="Скачать приложение Кофемания VPN для Android"
+        >
+          <img
+            src={bannerAppDownload}
+            alt="У нас есть приложение — быстрое и безопасное VPN-соединение в смартфоне"
+            className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-[1.01]"
+            loading="lazy"
+            decoding="async"
+          />
+        </button>
+      ) : (
+        <a
+          href={TELEGRAM_BOT_BANNER_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group block rounded-3xl overflow-hidden border border-coffee-latte/40 shadow-coffee-lg hover:shadow-coffee-xl hover:border-coffee-mocha/30 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coffee-espresso focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          aria-label="Открыть Telegram-бот Кофемания VPN"
+        >
+          <img
+            src={bannerTgNative}
+            alt="Управляйте ключами в Telegram — бот @coffemaniaVPNbot"
+            className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-[1.01]"
+            loading="lazy"
+            decoding="async"
+          />
+        </a>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3" role="alert">
@@ -672,32 +731,6 @@ export function MyKeys() {
         </>
       ) : (
         <>
-          {user && (
-            <div className="bg-gradient-to-r from-coffee-cappuccino/50 to-coffee-milk/50 backdrop-blur-xl rounded-2xl border border-coffee-latte/40 p-5 md:p-6">
-              <h3 className="text-sm font-semibold text-coffee-mocha/90 uppercase tracking-wide mb-3">
-                Аккаунт
-              </h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="flex items-center gap-3">
-                  <Mail className="w-5 h-5 text-coffee-mocha flex-shrink-0" />
-                  <div>
-                    <p className="text-xs text-coffee-mocha/90">Email</p>
-                    <p className="font-medium text-coffee-espresso">{user.email}</p>
-                  </div>
-                </div>
-                {user.telegram_username && (
-                  <div className="flex items-center gap-3">
-                    <Send className="w-5 h-5 text-coffee-mocha flex-shrink-0" />
-                    <div>
-                      <p className="text-xs text-coffee-mocha/90">Telegram</p>
-                      <p className="font-medium text-coffee-espresso">@{user.telegram_username}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           <SubscriptionPricing
             mode="onboarding"
             packages={PRICING_PACKAGES}
