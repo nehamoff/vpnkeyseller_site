@@ -7,14 +7,15 @@
   DialogTitle,
 } from "../ui/dialog";
 import { CreditCard, Loader2, ShieldCheck } from "lucide-react";
-import { PAYMENT_CHARGE_RUB } from "./purchase-constants";
-
 export interface CheckoutPackage {
   id: string;
   name: string;
   price: number;
   daysCount: number;
   periodLabel: string;
+  savingsLabel?: string;
+  compareAtPrice?: number;
+  perMonthPrice?: number;
 }
 
 interface PurchaseCheckoutDialogProps {
@@ -53,24 +54,32 @@ export function PurchaseCheckoutDialog({
             <span className="text-coffee-mocha">Срок</span>
             <span className="font-medium text-coffee-espresso">{pkg.periodLabel}</span>
           </div>
-          <div className="flex justify-between gap-4 text-sm">
-            <span className="text-coffee-mocha/90">Цена тарифа</span>
-            <span className="text-coffee-mocha/90 line-through">{pkg.price} ₽</span>
-          </div>
+          {pkg.savingsLabel && (
+            <div className="flex justify-between gap-4 text-sm">
+              <span className="text-coffee-mocha/90">Выгода</span>
+              <span className="font-medium text-emerald-800">{pkg.savingsLabel}</span>
+            </div>
+          )}
+          {pkg.compareAtPrice != null && (
+            <div className="flex justify-between gap-4 text-sm">
+              <span className="text-coffee-mocha/90">Без скидки</span>
+              <span className="text-coffee-mocha/90 line-through">{pkg.compareAtPrice} ₽</span>
+            </div>
+          )}
           <div className="border-t border-coffee-latte/50 pt-3 flex justify-between items-center">
             <span className="font-medium text-coffee-espresso flex items-center gap-2">
               <CreditCard className="h-4 w-4" />
-              К оплате сейчас
+              К оплате
             </span>
-            <span className="text-2xl font-bold text-coffee-espresso">{PAYMENT_CHARGE_RUB} ₽</span>
+            <span className="text-2xl font-bold text-coffee-espresso">{pkg.price} ₽</span>
           </div>
         </div>
 
         <div className="flex gap-2 rounded-lg bg-amber-50 border border-amber-200/80 px-3 py-2.5 text-xs text-amber-900">
           <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />
           <p>
-            Тестовый платёж: списывается <strong>{PAYMENT_CHARGE_RUB} ₽</strong>. После оплаты ключ
-            создаётся автоматически в течение минуты.
+            Оплата через защищённую форму ЮKassa. После оплаты ключ создаётся автоматически в
+            течение минуты.
           </p>
         </div>
 
@@ -97,7 +106,7 @@ export function PurchaseCheckoutDialog({
             ) : (
               <>
                 <CreditCard className="h-4 w-4" />
-                Оплатить {PAYMENT_CHARGE_RUB} ₽
+                Оплатить {pkg.price} ₽
               </>
             )}
           </button>

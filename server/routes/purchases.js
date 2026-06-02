@@ -11,11 +11,9 @@ import {
 import { createPayment, getPaymentStatus, cancelPayment } from "../yookassa-wrapper.js";
 import { addGbByUsername } from "../remnawave-wrapper.js";
 import { getGbPackage, GB_TOPUP_PACKAGES } from "../gb-packages.js";
+import { resolveSubscriptionChargeAmount } from "../subscription-packages.js";
 
 const router = Router();
-
-/** Тестовая сумма оплаты (чек на 1 ₽). Позже заменить на price из тарифа. */
-const PAYMENT_AMOUNT_RUB = 1.0;
 
 const PAID_STATUSES = new Set(["succeeded", "waiting_for_capture"]);
 
@@ -192,7 +190,7 @@ async function fulfillGbTopup(purchaseRow) {
 
     const addResult = await addGbByUsername(username, Number(gbAmount));
     if (!addResult.success) {
-        throw new Error(addResult.error || "Не удалось добавить трафик в Remnawave");
+        throw new Error(addResult.error || "Не удалось добавить трафик к ключу");
     }
 
     const paymentStatusResult = paymentId ? await getPaymentStatus(paymentId) : null;
@@ -240,7 +238,7 @@ async function fulfillRenewal(purchaseRow) {
 
     const renewResult = await renewSubscriptionByUsername(username, daysCount);
     if (!renewResult.success) {
-        throw new Error(renewResult.error || "Не удалось продлить ключ в Remnawave");
+        throw new Error(renewResult.error || "Не удалось продлить ключ");
     }
 
     const expiresAt = renewResult.expire_at
@@ -360,7 +358,7 @@ async function fulfillPurchase(purchaseRow) {
 }
 
 /**
- * Создаёт платёж YooKassa (1 ₽) и запись покупки в ожидании оплаты.
+ * Создаёт платёж YooKassa и запись покупки в ожидании оплаты.
  * POST /api/purchases
  */
 router.post("/", async (req, res) => {
@@ -376,6 +374,11 @@ router.post("/", async (req, res) => {
             return res.status(400).json({ error: "Укажите package_name" });
         }
 
+        const chargeAmount = resolveSubscriptionChargeAmount(price, days_count);
+        if (chargeAmount == null) {
+            return res.status(400).json({ error: "Неверная цена или срок тарифа" });
+        }
+
         const userResult = await pool.query("SELECT email FROM users WHERE id = $1", [userId]);
         if (userResult.rows.length === 0) {
             return res.status(404).json({ error: "Пользователь не найден" });
@@ -386,10 +389,10 @@ router.post("/", async (req, res) => {
         const returnUrl = resolvePaymentReturnUrl(req);
 
         console.log(
-            `[Purchase] Payment ${PAYMENT_AMOUNT_RUB}₽ for ${email}, order ${orderId} (catalog price ${price ?? "—"}₽), return ${returnUrl}`
+            `[Purchase] Payment ${chargeAmount}₽ for ${email}, order ${orderId} (${package_name}), return ${returnUrl}`
         );
 
-        const paymentResult = await createPayment(orderId, email, PAYMENT_AMOUNT_RUB, returnUrl);
+        const paymentResult = await createPayment(orderId, email, chargeAmount, returnUrl);
 
         if (!paymentResult.success) {
             console.error("Failed to create payment:", paymentResult.error);
@@ -407,7 +410,7 @@ router.post("/", async (req, res) => {
        )
        VALUES ($1, $2, $3, $4, $5, $6, 'awaiting_payment', 'new')
        RETURNING ${PURCHASE_FIELDS}`,
-            [userId, package_name, price || PAYMENT_AMOUNT_RUB, days_count, paymentId, paymentResult.status]
+            [userId, package_name, chargeAmount, days_count, paymentId, paymentResult.status]
         );
 
         const purchase = purchaseResult.rows[0];
@@ -435,7 +438,7 @@ router.post("/", async (req, res) => {
             payment: {
                 id: paymentId,
                 status: paymentResult.status,
-                amount: PAYMENT_AMOUNT_RUB,
+                amount: chargeAmount,
                 confirmation_url: paymentResult.confirmation_url,
             },
         });
@@ -757,6 +760,11 @@ router.post("/keys/renew", async (req, res) => {
             return res.status(400).json({ error: "Укажите username и package_name" });
         }
 
+        const chargeAmount = resolveSubscriptionChargeAmount(price, days_count);
+        if (chargeAmount == null) {
+            return res.status(400).json({ error: "Неверная цена или срок тарифа" });
+        }
+
         const owned = await assertOwnedRemnaKey(userId, username);
         if (owned.error) {
             return res.status(owned.error.status).json({ error: owned.error.message });
@@ -767,12 +775,7 @@ router.post("/keys/renew", async (req, res) => {
         const orderId = `renew-${userId}-${Date.now()}`;
         const returnUrl = resolvePaymentReturnUrl(req);
 
-        const paymentResult = await createPayment(
-            orderId,
-            email,
-            PAYMENT_AMOUNT_RUB,
-            returnUrl
-        );
+        const paymentResult = await createPayment(orderId, email, chargeAmount, returnUrl);
 
         if (!paymentResult.success) {
             return res.status(500).json({
@@ -794,7 +797,7 @@ router.post("/keys/renew", async (req, res) => {
             [
                 userId,
                 renewalLabel,
-                price || PAYMENT_AMOUNT_RUB,
+                chargeAmount,
                 days_count,
                 paymentResult.payment_id,
                 paymentResult.status,
@@ -811,7 +814,7 @@ router.post("/keys/renew", async (req, res) => {
             payment: {
                 id: paymentResult.payment_id,
                 status: paymentResult.status,
-                amount: PAYMENT_AMOUNT_RUB,
+                amount: chargeAmount,
                 confirmation_url: paymentResult.confirmation_url,
             },
         });
@@ -927,7 +930,7 @@ router.get("/remnawave/keys", async (req, res) => {
         res.json({ success: true, keys });
     } catch (error) {
         console.error("Fetch Remnawave keys error:", error);
-        res.status(500).json({ error: "Ошибка получения ключей из Remnawave" });
+        res.status(500).json({ error: "Не удалось загрузить VPN-ключи" });
     }
 });
 

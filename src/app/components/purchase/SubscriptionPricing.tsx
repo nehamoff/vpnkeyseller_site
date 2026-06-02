@@ -1,18 +1,47 @@
 ﻿import { useState } from "react";
 import { ChevronDown, Plus, ShoppingCart } from "lucide-react";
 import type { CheckoutPackage } from "./PurchaseCheckoutDialog";
-import { PAYMENT_CHARGE_RUB } from "./purchase-constants";
+import type { SubscriptionPricingPackage } from "./purchase-constants";
 
-export interface PricingPackage extends CheckoutPackage {
-  features: string[];
-  popular?: boolean;
-}
+export type PricingPackage = SubscriptionPricingPackage & CheckoutPackage;
 
 interface SubscriptionPricingProps {
   mode: "onboarding" | "addon";
   packages: PricingPackage[];
   onSelect: (pkg: PricingPackage) => void;
   disabled?: boolean;
+}
+
+function SavingsBadge({ pkg }: { pkg: PricingPackage }) {
+  if (!pkg.savingsLabel) return null;
+  return (
+    <div className="absolute -top-3 right-4 rounded-full bg-emerald-600 px-3 py-0.5 text-xs font-bold text-white shadow-sm">
+      {pkg.savingsLabel}
+    </div>
+  );
+}
+
+function PriceBlock({ pkg }: { pkg: PricingPackage }) {
+  return (
+    <div className="text-center mb-6 pt-2">
+      <h3 className="text-2xl font-bold text-coffee-espresso mb-2">{pkg.name}</h3>
+      {pkg.compareAtPrice != null && (
+        <p className="text-sm text-coffee-mocha/80 line-through mb-1">
+          {pkg.compareAtPrice} ₽ при оплате помесячно
+        </p>
+      )}
+      <div className="flex items-baseline justify-center gap-2">
+        <span className="text-4xl font-bold text-coffee-espresso">{pkg.price}</span>
+        <span className="text-coffee-mocha/90 text-lg">₽</span>
+      </div>
+      <p className="text-sm text-coffee-mocha/90 mt-2">{pkg.periodLabel}</p>
+      {pkg.perMonthPrice != null && (
+        <p className="text-xs font-medium text-emerald-800 mt-1">
+          ≈ {pkg.perMonthPrice} ₽ в месяц
+        </p>
+      )}
+    </div>
+  );
 }
 
 export function SubscriptionPricing({
@@ -45,7 +74,7 @@ export function SubscriptionPricing({
                 Добавить ещё один ключ
               </p>
               <p className="text-xs text-coffee-mocha/90 mt-0.5">
-                Отдельная подписка · оплата {PAYMENT_CHARGE_RUB} ₽
+                Отдельная подписка · от {packages[0]?.price ?? "—"} ₽
               </p>
             </div>
           </div>
@@ -66,7 +95,8 @@ export function SubscriptionPricing({
                 <div>
                   <p className="font-medium text-coffee-espresso">{pkg.name}</p>
                   <p className="text-xs text-coffee-mocha/90">
-                    {pkg.periodLabel} · каталог {pkg.price} ₽
+                    {pkg.periodLabel}
+                    {pkg.savingsLabel ? ` · ${pkg.savingsLabel}` : ""}
                   </p>
                 </div>
                 <button
@@ -76,7 +106,7 @@ export function SubscriptionPricing({
                   className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border border-coffee-latte bg-card text-sm font-medium text-coffee-espresso hover:bg-coffee-cappuccino/50 disabled:opacity-50 shrink-0"
                 >
                   <ShoppingCart className="h-3.5 w-3.5" />
-                  Купить · {PAYMENT_CHARGE_RUB} ₽
+                  Купить · {pkg.price} ₽
                 </button>
               </div>
             ))}
@@ -93,7 +123,7 @@ export function SubscriptionPricing({
           Выберите подписку
         </h2>
         <p className="text-coffee-mocha max-w-lg mx-auto">
-          Первый ключ за {PAYMENT_CHARGE_RUB} ₽ через ЮKassa — займёт пару минут
+          LTE‑серверы, надёжные протоколы и подключение за минуту — оплата через ЮKassa
         </p>
       </div>
 
@@ -112,19 +142,9 @@ export function SubscriptionPricing({
                 Популярный
               </div>
             )}
+            <SavingsBadge pkg={pkg} />
 
-            <div className="absolute top-4 right-4 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
-              {PAYMENT_CHARGE_RUB} ₽
-            </div>
-
-            <div className="text-center mb-6 pt-2">
-              <h3 className="text-2xl font-bold text-coffee-espresso mb-2">{pkg.name}</h3>
-              <div className="flex items-baseline justify-center gap-2">
-                <span className="text-4xl font-bold text-coffee-espresso">{pkg.price}</span>
-                <span className="text-coffee-mocha/90 text-lg">₽</span>
-              </div>
-              <p className="text-sm text-coffee-mocha/90 mt-2">{pkg.periodLabel}</p>
-            </div>
+            <PriceBlock pkg={pkg} />
 
             <ul className="space-y-3 mb-8">
               {pkg.features.map((feature) => (
@@ -146,7 +166,7 @@ export function SubscriptionPricing({
               }`}
             >
               <ShoppingCart className="w-4 h-4" />
-              Купить за {PAYMENT_CHARGE_RUB} ₽
+              Купить за {pkg.price} ₽
             </button>
           </div>
         ))}

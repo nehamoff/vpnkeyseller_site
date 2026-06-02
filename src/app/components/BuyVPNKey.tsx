@@ -3,44 +3,14 @@ import { Loader2, ShoppingCart, Check, AlertCircle } from "lucide-react";
 import { purchasesAPI } from "../../lib/purchases-api";
 import { PurchaseCheckoutDialog, type CheckoutPackage } from "./purchase/PurchaseCheckoutDialog";
 import { PaymentOverlay } from "./purchase/PaymentOverlay";
-import { PAYMENT_CHARGE_RUB } from "./purchase/purchase-constants";
+import {
+  SUBSCRIPTION_PRICING_PACKAGES,
+  type SubscriptionPricingPackage,
+} from "./purchase/purchase-constants";
 
-interface PricingPackage extends CheckoutPackage {
-    days: number;
-    features: string[];
-    popular?: boolean;
-}
+type PricingPackage = SubscriptionPricingPackage & CheckoutPackage;
 
-const PACKAGES: PricingPackage[] = [
-    {
-        id: "basic",
-        name: "Базовый",
-        price: 299,
-        days: 30,
-        daysCount: 30,
-        periodLabel: "30 дней",
-        features: ["До 10 Мбит/с", "3 устройства", "30 дней"],
-    },
-    {
-        id: "pro",
-        name: "Профессиональный",
-        price: 599,
-        days: 30,
-        daysCount: 30,
-        periodLabel: "30 дней",
-        features: ["До 50 Мбит/с", "10 устройств", "30 дней", "Приоритет"],
-        popular: true,
-    },
-    {
-        id: "premium",
-        name: "Премиум",
-        price: 999,
-        days: 30,
-        daysCount: 30,
-        periodLabel: "30 дней",
-        features: ["До 100 Мбит/с", "Неограниченно", "30 дней", "Приоритет", "Поддержка 24/7"],
-    },
-];
+const PACKAGES: PricingPackage[] = SUBSCRIPTION_PRICING_PACKAGES;
 
 type OverlayVariant = "creating" | "redirect" | null;
 
@@ -50,6 +20,7 @@ export function BuyVPNKey() {
     const [checkoutLoading, setCheckoutLoading] = useState(false);
     const [overlay, setOverlay] = useState<OverlayVariant>(null);
     const [overlayPackageName, setOverlayPackageName] = useState<string | undefined>();
+    const [overlayAmountRub, setOverlayAmountRub] = useState<number | undefined>();
     const [activePurchaseId, setActivePurchaseId] = useState<number | null>(null);
     const [cancelOverlayLoading, setCancelOverlayLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -61,6 +32,7 @@ export function BuyVPNKey() {
         setCheckoutLoading(true);
         setCheckoutOpen(false);
         setOverlayPackageName(checkoutPkg.name);
+        setOverlayAmountRub(checkoutPkg.price);
         setOverlay("creating");
         setError(null);
         setActivePurchaseId(null);
@@ -125,6 +97,7 @@ export function BuyVPNKey() {
                 <PaymentOverlay
                     variant={overlay}
                     packageName={overlayPackageName}
+                    amountRub={overlayAmountRub}
                     onCancel={() => void handleOverlayCancel()}
                     cancelLoading={cancelOverlayLoading}
                 />
@@ -141,7 +114,7 @@ export function BuyVPNKey() {
             <div className="text-center mb-4">
                 <h2 className="text-3xl font-bold text-coffee-espresso mb-2">Выберите тариф</h2>
                 <p className="text-coffee-mocha">
-                    Оплата {PAYMENT_CHARGE_RUB} ₽ через ЮKassa · ключи в разделе «Мои ключи»
+                    LTE‑серверы, надёжные протоколы, подключение за минуту · оплата через ЮKassa
                 </p>
             </div>
 
@@ -170,15 +143,27 @@ export function BuyVPNKey() {
                                 Популярно
                             </div>
                         )}
-                        <div className="absolute top-3 left-3 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
-                            {PAYMENT_CHARGE_RUB} ₽
-                        </div>
+                        {pkg.savingsLabel && (
+                            <div className="absolute top-3 left-3 rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-bold text-white">
+                                {pkg.savingsLabel}
+                            </div>
+                        )}
 
                         <div className="p-8 pt-10">
                             <h3 className="text-xl font-bold text-coffee-espresso mb-2">{pkg.name}</h3>
                             <div className="mb-6">
+                                {pkg.compareAtPrice != null && (
+                                    <p className="text-sm text-coffee-mocha/80 line-through mb-1">
+                                        {pkg.compareAtPrice} ₽ помесячно
+                                    </p>
+                                )}
                                 <span className="text-4xl font-bold text-coffee-espresso">{pkg.price}</span>
                                 <span className="text-coffee-mocha ml-2">₽ / {pkg.periodLabel}</span>
+                                {pkg.perMonthPrice != null && (
+                                    <p className="text-xs font-medium text-emerald-800 mt-1">
+                                        ≈ {pkg.perMonthPrice} ₽ в месяц
+                                    </p>
+                                )}
                             </div>
 
                             <ul className="space-y-3 mb-8">
@@ -204,7 +189,7 @@ export function BuyVPNKey() {
                                 }`}
                             >
                                 <ShoppingCart className="w-4 h-4" />
-                                Купить за {PAYMENT_CHARGE_RUB} ₽
+                                Купить за {pkg.price} ₽
                             </button>
                         </div>
                     </div>
@@ -215,7 +200,7 @@ export function BuyVPNKey() {
                 <h3 className="font-semibold text-blue-900 mb-3">Как это работает</h3>
                 <ol className="space-y-2 text-sm text-blue-800 list-decimal list-inside">
                     <li>Выберите тариф и подтвердите заказ</li>
-                    <li>Оплатите на странице ЮKassa ({PAYMENT_CHARGE_RUB} ₽)</li>
+                    <li>Оплатите на странице ЮKassa</li>
                     <li>Вернитесь в «Мои ключи» — ключ активируется автоматически</li>
                 </ol>
             </div>

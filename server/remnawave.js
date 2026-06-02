@@ -45,7 +45,7 @@ export async function createInboundKey(email, purchaseDate = null) {
     console.warn("Remnawave API не настроена (REMNAWAVE_API_URL или REMNAWAVE_API_KEY отсутствует)");
     return {
       success: false,
-      error: "Remnawave API не настроена"
+      error: "Сервис VPN временно недоступен"
     };
   }
 
@@ -160,7 +160,7 @@ export async function updateInboundKey(inboundId, updates) {
     console.warn("Remnawave API не настроена");
     return {
       success: false,
-      error: "Remnawave API не настроена"
+      error: "Сервис VPN временно недоступен"
     };
   }
 
@@ -212,7 +212,7 @@ export async function getInboundKey(inboundId) {
   if (!baseUrl || !apiKey) {
     return {
       success: false,
-      error: "Remnawave API не настроена"
+      error: "Сервис VPN временно недоступен"
     };
   }
 
@@ -262,7 +262,7 @@ export async function deleteInboundKey(inboundId) {
   if (!baseUrl || !apiKey) {
     return {
       success: false,
-      error: "Remnawave API не настроена"
+      error: "Сервис VPN временно недоступен"
     };
   }
 

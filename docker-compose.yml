@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  # PostgreSQL База данных
+  postgres:
+    image: postgres:15-alpine
+    container_name: cafemaniavpn-db
+    environment:
+      POSTGRES_DB: cafemaniavpn
+      POSTGRES_USER: deploy
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure-password-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./server/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./server/setup-db.sql:/docker-entrypoint-initdb.d/02-setup.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U deploy" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cafemaniavpn-network
+    restart: unless-stopped
+
+  # Node.js Backend
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: cafemaniavpn-api
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://deploy:${DB_PASSWORD:-secure-password-change-me}@postgres:5432/cafemaniavpn
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-secure-random-string}
+      FRONTEND_URL: https://coffeemaniavpn.ru
+      REMNAWAVE_BASE_URL: ${REMNAWAVE_BASE_URL:-https://panel.coffemaniavpn.online/}
+      REMNAWAVE_TOKEN: ${REMNAWAVE_TOKEN:-}
+      REMNAWAVE_ADMIN_LOGIN: ${REMNAWAVE_ADMIN_LOGIN:-admin}
+      REMNAWAVE_ADMIN_PASSWORD: ${REMNAWAVE_ADMIN_PASSWORD:-}
+      TEST_MODE: ${TEST_MODE:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@coffeemaniavpn.ru}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    networks:
+      - cafemaniavpn-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: cafemaniavpn-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./dist:/usr/share/nginx/html:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - backend
+    networks:
+      - cafemaniavpn-network
+    restart: unless-stopped
+  # Python интеграция (опционально для отдельного сервиса)
+  # python-integration:
+  #   build:
+  #     context: ./server
+  #     dockerfile: Dockerfile.python
+  #   container_name: cafemaniavpn-python
+  #   environment:
+  #     REMNAWAVE_BASE_URL: ${REMNAWAVE_BASE_URL:-}
+  #     REMNAWAVE_TOKEN: ${REMNAWAVE_TOKEN:-}
+  #   volumes:
+  #     - ./server:/app
+  #   networks:
+  #     - cafemaniavpn-network
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  cafemaniavpn-network:
+    driver: bridge

@@ -14,6 +14,10 @@ import { PaymentOverlay } from "./purchase/PaymentOverlay";
 import { PendingPurchasesBanner } from "./purchase/PendingPurchasesBanner";
 import { KeysManagementPanel } from "./purchase/KeysManagementPanel";
 import { SubscriptionPricing, type PricingPackage } from "./purchase/SubscriptionPricing";
+import {
+  GB_TOPUP_PACKAGES,
+  SUBSCRIPTION_PRICING_PACKAGES,
+} from "./purchase/purchase-constants";
 import { RenewKeyDialog } from "./purchase/RenewKeyDialog";
 import { AddGbDialog } from "./purchase/AddGbDialog";
 import { TelegramLoginWidget } from "./TelegramLoginWidget";
@@ -38,33 +42,7 @@ const TELEGRAM_BOT_BANNER_URL = "https://t.me/coffemaniaVPNbot?start=17";
 const ANDROID_APK_URL =
   "https://github.com/canawa/vpn_client/releases/download/beta-release/coffeemaniavpn.apk";
 
-const PRICING_PACKAGES: PricingPackage[] = [
-  {
-    id: "month",
-    name: "1 месяц",
-    price: 149,
-    daysCount: 30,
-    periodLabel: "30 дней",
-    features: ["Безлимитная скорость", "Все серверы доступны", "Круглосуточная поддержка"],
-  },
-  {
-    id: "three-months",
-    name: "3 месяца",
-    price: 399,
-    daysCount: 90,
-    periodLabel: "90 дней",
-    features: ["Безлимитная скорость", "Все серверы доступны", "Круглосуточная поддержка", "Экономия 11%"],
-    popular: true,
-  },
-  {
-    id: "year",
-    name: "12 месяцев",
-    price: 899,
-    daysCount: 365,
-    periodLabel: "365 дней",
-    features: ["Безлимитная скорость", "Все серверы доступны", "Круглосуточная поддержка", "Экономия 50%"],
-  },
-];
+const PRICING_PACKAGES = SUBSCRIPTION_PRICING_PACKAGES;
 
 type OverlayVariant = "creating" | "redirect" | "confirm" | null;
 
@@ -81,6 +59,7 @@ export function MyKeys() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [overlay, setOverlay] = useState<OverlayVariant>(null);
   const [overlayPackageName, setOverlayPackageName] = useState<string | undefined>();
+  const [overlayAmountRub, setOverlayAmountRub] = useState<number | undefined>();
   const [activePurchaseId, setActivePurchaseId] = useState<number | null>(null);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
@@ -151,7 +130,7 @@ export function MyKeys() {
               );
             } else if (type === "renewal") {
               showSuccessToast(
-                `Подписка продлена (${confirmed.purchase.package_name}). Дата обновлена в Remnawave.`
+                `Подписка продлена (${confirmed.purchase.package_name}). Срок действия обновлён.`
               );
             } else {
               showSuccessToast(
@@ -179,7 +158,7 @@ export function MyKeys() {
       try {
         await refreshRemnaKeys();
       } catch (remnaError) {
-        console.error("[MyKeys] Failed to fetch Remnawave keys:", remnaError);
+        console.error("[MyKeys] Failed to fetch VPN keys:", remnaError);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка при загрузке данных");
@@ -201,6 +180,7 @@ export function MyKeys() {
     setCheckoutLoading(true);
     setCheckoutOpen(false);
     setOverlayPackageName(checkoutPkg.name);
+    setOverlayAmountRub(checkoutPkg.price);
     setOverlay("creating");
     setError(null);
     setActivePurchaseId(null);
@@ -276,6 +256,7 @@ export function MyKeys() {
   const handleResumePayment = (purchaseId: number) => {
     const pkg = purchases.find((p) => p.id === purchaseId);
     setOverlayPackageName(pkg?.package_name);
+    setOverlayAmountRub(pkg ? Number(pkg.price) : undefined);
     setActivePurchaseId(purchaseId);
 
     const resumed = purchasesAPI.goToPendingPayment(purchaseId);
@@ -332,6 +313,7 @@ export function MyKeys() {
     setRenewLoading(true);
     setRenewDialogOpen(false);
     setOverlayPackageName(`Продление · ${pkg.name}`);
+    setOverlayAmountRub(pkg.price);
     setOverlay("creating");
     setError(null);
     setActivePurchaseId(null);
@@ -385,7 +367,9 @@ export function MyKeys() {
 
     setAddGbLoading(true);
     setAddGbDialogOpen(false);
+    const gbPkg = GB_TOPUP_PACKAGES.find((p) => p.id === addGbPackageId);
     setOverlayPackageName(`Докупка трафика`);
+    setOverlayAmountRub(gbPkg?.price);
     setOverlay("creating");
     setError(null);
     setActivePurchaseId(null);
@@ -456,6 +440,7 @@ export function MyKeys() {
     }
     setOverlay(null);
     setOverlayPackageName(undefined);
+    setOverlayAmountRub(undefined);
   };
 
   const copyToClipboard = (text: string, id: string) => {
@@ -494,6 +479,7 @@ export function MyKeys() {
         <PaymentOverlay
           variant={overlay}
           packageName={overlayPackageName}
+          amountRub={overlayAmountRub}
           onCancel={overlay === "confirm" ? undefined : handleOverlayCancel}
           cancelLoading={cancelOverlayLoading}
         />
@@ -542,7 +528,7 @@ export function MyKeys() {
               Привязать Telegram
             </DialogTitle>
             <DialogDescription>
-              Импортируем VPN-ключ из бота, если он уже есть в Remnawave по вашему Telegram ID.
+              Импортируем VPN-ключ из бота, если он уже привязан к вашему Telegram.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">

@@ -1,6 +1,5 @@
 ﻿import { AlertCircle, CreditCard, Loader2, RefreshCw, XCircle } from "lucide-react";
 import type { Purchase } from "../../../lib/purchases-api";
-import { PAYMENT_CHARGE_RUB } from "./purchase-constants";
 
 interface PendingPurchasesBannerProps {
   purchases: Purchase[];
@@ -41,10 +40,7 @@ export function PendingPurchasesBanner({
       <ul className="space-y-3">
         {pending.map((purchase) => {
           const busy = confirmingId === purchase.id || cancellingId === purchase.id;
-          const amountRub =
-            purchase.purchase_type === "gb_topup"
-              ? Number(purchase.price)
-              : PAYMENT_CHARGE_RUB;
+          const amountRub = Number(purchase.price);
           return (
             <li
               key={purchase.id}

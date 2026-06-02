@@ -726,7 +726,7 @@ class RemnawaveAPI:
         try:
             user_data = self.get_user_by_username(username)
             if not user_data["success"]:
-                return {"success": False, "error": f"Ключ {username} не найден в Remnawave"}
+                return {"success": False, "error": f"Ключ {username} не найден"}
 
             result = self._renew_user_record(user_data["data"], days)
             if result["success"]:

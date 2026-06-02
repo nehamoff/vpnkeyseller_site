@@ -402,7 +402,7 @@ export function Dashboard() {
                     </div>
                     <div>
                       <p className="font-medium text-coffee-espresso">Привязать Telegram</p>
-                      <p className="text-xs text-coffee-mocha/90 mt-0.5">Для доступа к подпискам Remnawave</p>
+                      <p className="text-xs text-coffee-mocha/90 mt-0.5">Для доступа к VPN-подпискам в личном кабинете</p>
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5 text-coffee-latte group-hover:text-coffee-espresso/80 transition-colors" />
@@ -624,7 +624,7 @@ export function Dashboard() {
               Привязать Telegram
             </DialogTitle>
             <DialogDescription>
-              Нажмите кнопку ниже и подтвердите доступ. Это нужно для загрузки VPN-подписок из Remnawave.
+              Нажмите кнопку ниже и подтвердите доступ — подтянем ваши VPN-ключи из Telegram-бота.
             </DialogDescription>
           </DialogHeader>
 

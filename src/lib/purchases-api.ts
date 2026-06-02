@@ -1,5 +1,5 @@
 /**
- * Remnawave VPN SDK для клиентской части
+ * API покупок и VPN-ключей (клиент)
  * Для использования при покупке подписок через UI
  */
 
@@ -139,10 +139,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const purchasesAPI = {
     /**
-     * Создаёт платёж YooKassa (1 ₽) и покупку; при наличии confirmation_url перенаправляет на оплату.
+     * Создаёт платёж YooKassa и покупку; при наличии confirmation_url перенаправляет на оплату.
      */
     /**
-     * Продление существующего ключа (оплата + Remnawave).
+     * Продление существующего ключа (оплата + активация).
      */
     async buyExtraGb(
         username: string,
@@ -327,7 +327,7 @@ export const purchasesAPI = {
     },
 
     /**
-     * Получает ключи пользователя из Remnawave панели
+     * Получает VPN-ключи пользователя
      */
     async getRemnaKeys() {
         return request<{ success: boolean; keys: RemnaKey[] }>("/purchases/remnawave/keys");

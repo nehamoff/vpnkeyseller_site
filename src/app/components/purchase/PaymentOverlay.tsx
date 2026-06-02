@@ -1,5 +1,4 @@
 ﻿import { AlertCircle, CreditCard, Loader2, ShieldCheck, Sparkles, XCircle } from "lucide-react";
-import { PAYMENT_CHARGE_RUB } from "./purchase-constants";
 
 export type PaymentOverlayVariant = "redirect" | "confirm" | "creating";
 
@@ -27,6 +26,7 @@ const COPY: Record<
 interface PaymentOverlayProps {
   variant: PaymentOverlayVariant;
   packageName?: string;
+  amountRub?: number;
   onCancel?: () => void;
   cancelLoading?: boolean;
 }
@@ -34,6 +34,7 @@ interface PaymentOverlayProps {
 export function PaymentOverlay({
   variant,
   packageName,
+  amountRub,
   onCancel,
   cancelLoading = false,
 }: PaymentOverlayProps) {
@@ -60,7 +61,9 @@ export function PaymentOverlay({
             {packageName && (
               <p className="text-sm font-medium text-coffee-espresso truncate mt-0.5">{packageName}</p>
             )}
-            <p className="text-xs text-amber-900/70 mt-0.5">Сумма: {PAYMENT_CHARGE_RUB} ₽</p>
+            {amountRub != null && (
+              <p className="text-xs text-amber-900/70 mt-0.5">Сумма: {amountRub} ₽</p>
+            )}
           </div>
         </div>
 

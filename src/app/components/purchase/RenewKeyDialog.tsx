@@ -9,7 +9,6 @@
 import { Calendar, CreditCard, Loader2, RefreshCw } from "lucide-react";
 import type { RemnaKey } from "./KeysManagementPanel";
 import type { PricingPackage } from "./SubscriptionPricing";
-import { PAYMENT_CHARGE_RUB } from "./purchase-constants";
 
 interface RenewKeyDialogProps {
   open: boolean;
@@ -45,7 +44,7 @@ export function RenewKeyDialog({
             Продлить ключ
           </DialogTitle>
           <DialogDescription>
-            Выберите срок — подписка продлится в Remnawave после оплаты
+            Выберите срок — подписка продлится автоматически после оплаты
           </DialogDescription>
         </DialogHeader>
 
@@ -67,17 +66,27 @@ export function RenewKeyDialog({
                       : "border-coffee-latte/50 hover:bg-coffee-cappuccino/50"
                   }`}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <input
                       type="radio"
                       name="renew-plan"
                       checked={selectedPackageId === plan.id}
                       onChange={() => onSelectPackage(plan.id)}
-                      className="text-coffee-espresso"
+                      className="text-coffee-espresso shrink-0"
                     />
-                    <span className="font-medium text-coffee-espresso">{plan.name}</span>
+                    <div className="min-w-0">
+                      <span className="font-medium text-coffee-espresso block">{plan.name}</span>
+                      {plan.savingsLabel && (
+                        <span className="text-xs text-emerald-800 font-medium">
+                          {plan.savingsLabel}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-coffee-mocha/90 text-xs">{plan.periodLabel}</span>
+                  <div className="text-right shrink-0">
+                    <span className="font-bold text-coffee-espresso">{plan.price} ₽</span>
+                    <p className="text-coffee-mocha/90 text-xs">{plan.periodLabel}</p>
+                  </div>
                 </label>
               ))}
             </div>
@@ -88,7 +97,7 @@ export function RenewKeyDialog({
               <CreditCard className="h-4 w-4" />
               К оплате
             </span>
-            <span className="text-xl font-bold">{PAYMENT_CHARGE_RUB} ₽</span>
+            <span className="text-xl font-bold">{pkg.price} ₽</span>
           </div>
         </div>
 
