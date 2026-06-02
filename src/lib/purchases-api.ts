@@ -33,6 +33,30 @@ export interface RemnaKey {
     usedTrafficGb?: number;
     leftoverGb?: number;
     trafficUsedPercent?: number;
+    hwidDeviceLimit?: number;
+    keySource?: "site" | "telegram";
+    isTelegramKey?: boolean;
+    telegramId?: string | null;
+}
+
+export interface HwidDevice {
+    hwid: string;
+    platform?: string | null;
+    osVersion?: string | null;
+    deviceModel?: string | null;
+    userAgent?: string | null;
+    requestIp?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+}
+
+export interface HwidDevicesResponse {
+    success: boolean;
+    username: string;
+    userUuid?: string;
+    deviceLimit: number;
+    total: number;
+    devices: HwidDevice[];
 }
 
 const PENDING_PURCHASE_KEY = "vpn_pending_purchase_id";
@@ -297,6 +321,22 @@ export const purchasesAPI = {
      */
     async getRemnaKeys() {
         return request<{ success: boolean; keys: RemnaKey[] }>("/purchases/remnawave/keys");
+    },
+
+    async getKeyDevices(username: string) {
+        const encoded = encodeURIComponent(username);
+        return request<HwidDevicesResponse>(`/purchases/keys/${encoded}/hwid-devices`);
+    },
+
+    async deleteKeyDevice(username: string, hwid: string) {
+        const encoded = encodeURIComponent(username);
+        return request<{ success: boolean; message: string; hwid: string }>(
+            `/purchases/keys/${encoded}/hwid-devices`,
+            {
+                method: "DELETE",
+                body: JSON.stringify({ hwid }),
+            }
+        );
     },
 
     /**

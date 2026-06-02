@@ -132,13 +132,6 @@ export const authApi = {
     return request<{ user: UserProfile }>("/auth/me");
   },
 
-  telegramAuth(data: TelegramAuthData) {
-    return request<{ token: string; user: UserProfile }>("/auth/telegram", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  },
-
   linkTelegram(data: TelegramAuthData) {
     return request<{ message: string; user: UserProfile }>("/auth/telegram/link", {
       method: "POST",

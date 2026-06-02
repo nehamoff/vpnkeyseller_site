@@ -2,15 +2,12 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Mail, Lock, ArrowLeft, Loader2 } from "lucide-react";
 import { Logo } from "./Logo";
-import { TelegramLoginWidget, getUserDisplayName } from "./TelegramLoginWidget";
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSlot,
 } from "./ui/input-otp";
 import { authApi, saveSession, ApiError } from "../../lib/api";
-
-const TELEGRAM_BOT = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "";
 
 type Step = "form" | "verify";
 
@@ -23,7 +20,6 @@ export function Register() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [tgLoading, setTgLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -92,20 +88,6 @@ export function Register() {
       setError(err instanceof ApiError ? err.message : "Не удалось отправить код");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleTelegramAuth = async (data: Parameters<typeof authApi.telegramAuth>[0]) => {
-    setError("");
-    setTgLoading(true);
-    try {
-      const result = await authApi.telegramAuth(data);
-      saveSession(result.token, getUserDisplayName(result.user));
-      navigate("/");
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Ошибка регистрации через Telegram");
-    } finally {
-      setTgLoading(false);
     }
   };
 
@@ -190,24 +172,6 @@ export function Register() {
                   Продолжить
                 </button>
               </form>
-
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-white/60 text-gray-500">или</span>
-                </div>
-              </div>
-
-              <div className="relative min-h-[48px] flex items-center justify-center">
-                {tgLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-xl z-10">
-                    <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
-                  </div>
-                )}
-                <TelegramLoginWidget botUsername={TELEGRAM_BOT} onAuth={handleTelegramAuth} />
-              </div>
             </>
           ) : (
             <>

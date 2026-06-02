@@ -17,7 +17,8 @@ app.use(cors({
       "http://localhost:5173",
       "http://127.0.0.1:5173",
       "http://localhost:3001",
-      "http://127.0.0.1:3001"
+      "http://127.0.0.1:3001",
+      "https://blog-raffle-sacrament.ngrok-free.dev"
     ];
 
     if (!origin || allowedOrigins.includes(origin)) {

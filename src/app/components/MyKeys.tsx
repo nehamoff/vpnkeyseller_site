@@ -16,6 +16,17 @@ import { KeysManagementPanel } from "./purchase/KeysManagementPanel";
 import { SubscriptionPricing, type PricingPackage } from "./purchase/SubscriptionPricing";
 import { RenewKeyDialog } from "./purchase/RenewKeyDialog";
 import { AddGbDialog } from "./purchase/AddGbDialog";
+import { TelegramLoginWidget } from "./TelegramLoginWidget";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { ApiError } from "../../lib/api";
+
+const TELEGRAM_BOT = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "";
 
 const PRICING_PACKAGES: PricingPackage[] = [
   {
@@ -76,6 +87,10 @@ export function MyKeys() {
   const [addGbPackageId, setAddGbPackageId] = useState("gb30");
   const [addGbDialogOpen, setAddGbDialogOpen] = useState(false);
   const [addGbLoading, setAddGbLoading] = useState(false);
+
+  const [telegramDialogOpen, setTelegramDialogOpen] = useState(false);
+  const [telegramLinkError, setTelegramLinkError] = useState("");
+  const [telegramLinkLoading, setTelegramLinkLoading] = useState(false);
 
   const hasPendingPayment = useMemo(
     () => purchases.some((p) => p.status === "awaiting_payment"),
@@ -400,6 +415,26 @@ export function MyKeys() {
     }
   };
 
+  const handleLinkTelegram = async (data: Parameters<typeof authApi.linkTelegram>[0]) => {
+    setTelegramLinkError("");
+    setTelegramLinkLoading(true);
+    try {
+      const result = await authApi.linkTelegram(data);
+      setUser(result.user);
+      setSuccess(
+        "Telegram привязан. Если в боте был ключ — он появится в списке с меткой Telegram."
+      );
+      setTelegramDialogOpen(false);
+      await refreshRemnaKeys();
+    } catch (err) {
+      setTelegramLinkError(
+        err instanceof ApiError ? err.message : "Не удалось привязать Telegram"
+      );
+    } finally {
+      setTelegramLinkLoading(false);
+    }
+  };
+
   const handleOverlayCancel = () => {
     if (activePurchaseId != null) {
       void handleCancelPayment(activePurchaseId);
@@ -483,6 +518,47 @@ export function MyKeys() {
         onConfirm={handleConfirmAddGb}
       />
 
+      <Dialog
+        open={telegramDialogOpen}
+        onOpenChange={(open) => {
+          setTelegramDialogOpen(open);
+          if (!open) setTelegramLinkError("");
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="w-5 h-5 text-blue-600" />
+              Привязать Telegram
+            </DialogTitle>
+            <DialogDescription>
+              Импортируем VPN-ключ из бота, если он уже есть в Remnawave по вашему Telegram ID.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {telegramLinkError && (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {telegramLinkError}
+              </div>
+            )}
+            <div className="relative min-h-[48px] flex items-center justify-center">
+              {telegramLinkLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-xl z-10">
+                  <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
+                </div>
+              )}
+              {TELEGRAM_BOT ? (
+                <TelegramLoginWidget botUsername={TELEGRAM_BOT} onAuth={handleLinkTelegram} />
+              ) : (
+                <p className="text-sm text-gray-500 text-center">
+                  Виджет Telegram не настроен (VITE_TELEGRAM_BOT_USERNAME)
+                </p>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Заголовок страницы */}
       <header>
         <h1 className="text-3xl font-bold text-gray-900">
@@ -526,6 +602,32 @@ export function MyKeys() {
         onCheckPayment={handleCheckPayment}
         onCancelPayment={handleCancelPayment}
       />
+
+      {user && !user.telegram_id && TELEGRAM_BOT && (
+        <div className="rounded-2xl border border-blue-200/80 bg-gradient-to-r from-blue-50 to-sky-50/80 p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100">
+              <Send className="h-5 w-5 text-blue-700" />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900">Есть ключ в Telegram-боте?</p>
+              <p className="text-sm text-gray-600 mt-0.5">
+                Привяжите Telegram — ключ из бота появится здесь с синей меткой.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setTelegramLinkError("");
+              setTelegramDialogOpen(true);
+            }}
+            className="shrink-0 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
+          >
+            Привязать Telegram
+          </button>
+        </div>
+      )}
 
       {hasManagedKeys ? (
         <>

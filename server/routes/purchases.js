@@ -2,9 +2,11 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import {
     createVpnUser,
-    getAllUsersFromRemnawave,
+    getAllRemnaKeysForAccount,
     renewSubscriptionByUsername,
     mapRemnawaveKey,
+    getHwidDevicesForKey,
+    deleteHwidDeviceForKey,
 } from "../remnawave-wrapper.js";
 import { createPayment, getPaymentStatus, cancelPayment } from "../yookassa-wrapper.js";
 import { addGbByUsername } from "../remnawave-wrapper.js";
@@ -20,6 +22,55 @@ const PAID_STATUSES = new Set(["succeeded", "waiting_for_capture"]);
 const PURCHASE_FIELDS = `id, user_id, package_name, price, days_count, gb_amount, purchased_at, expires_at,
   remnawave_inbound_id, remnawave_username, purchase_type,
   yookassa_payment_id, payment_status, status`;
+
+/** Проверяет, что ключ Remnawave принадлежит пользователю. */
+async function getAccountRemnaKeys(userId) {
+    const userResult = await pool.query(
+        "SELECT email, telegram_id FROM users WHERE id = $1",
+        [userId]
+    );
+    if (userResult.rows.length === 0) {
+        return { error: { status: 404, message: "Пользователь не найден" } };
+    }
+
+    const { email, telegram_id: telegramId } = userResult.rows[0];
+    const remnaResult = await getAllRemnaKeysForAccount(
+        email,
+        telegramId ? String(telegramId) : null
+    );
+    const rawKeys =
+        remnaResult.success && Array.isArray(remnaResult.data) ? remnaResult.data : [];
+
+    return { email, telegramId, rawKeys };
+}
+
+function hwidLookupOptions(owned) {
+    const key = owned.key;
+    const isTelegram = key.keySource === "telegram";
+    return {
+        username: key.username,
+        userUuid: key.uuid || undefined,
+        telegramId: isTelegram ? owned.telegramId : key.telegramId || undefined,
+    };
+}
+
+async function assertOwnedRemnaKey(userId, username) {
+    const account = await getAccountRemnaKeys(userId);
+    if (account.error) {
+        return account;
+    }
+
+    const key = account.rawKeys.find((k) => k.username === username);
+    if (!key) {
+        return { error: { status: 403, message: "Ключ не принадлежит вашему аккаунту" } };
+    }
+
+    return {
+        email: account.email,
+        telegramId: account.telegramId ? String(account.telegramId) : null,
+        key,
+    };
+}
 
 async function fulfillGbTopup(purchaseRow) {
     const {
@@ -534,21 +585,13 @@ router.post("/keys/add-gb", async (req, res) => {
             return res.status(400).json({ error: "Укажите ключ и пакет докупки (gb10, gb30, gb50)" });
         }
 
-        const userResult = await pool.query("SELECT email FROM users WHERE id = $1", [userId]);
-        if (userResult.rows.length === 0) {
-            return res.status(404).json({ error: "Пользователь не найден" });
+        const owned = await assertOwnedRemnaKey(userId, username);
+        if (owned.error) {
+            return res.status(owned.error.status).json({ error: owned.error.message });
         }
 
-        const email = userResult.rows[0].email;
-        const remnaResult = await getAllUsersFromRemnawave(email);
-        const rawKeys = remnaResult.data && Array.isArray(remnaResult.data) ? remnaResult.data : [];
-        const ownsKey = rawKeys.some((k) => k.username === username);
-
-        if (!ownsKey) {
-            return res.status(403).json({ error: "Ключ не принадлежит вашему аккаунту" });
-        }
-
-        const keyUuid = user_uuid || rawKeys.find((k) => k.username === username)?.uuid;
+        const email = owned.email;
+        const keyUuid = user_uuid || owned.key.uuid;
         const orderId = `gb-${userId}-${Date.now()}`;
         const returnUrl =
             (process.env.YOOKASSA_RETURN_URL ||
@@ -623,21 +666,13 @@ router.post("/keys/renew", async (req, res) => {
             return res.status(400).json({ error: "Укажите username и package_name" });
         }
 
-        const userResult = await pool.query("SELECT email FROM users WHERE id = $1", [userId]);
-        if (userResult.rows.length === 0) {
-            return res.status(404).json({ error: "Пользователь не найден" });
+        const owned = await assertOwnedRemnaKey(userId, username);
+        if (owned.error) {
+            return res.status(owned.error.status).json({ error: owned.error.message });
         }
 
-        const email = userResult.rows[0].email;
-        const remnaResult = await getAllUsersFromRemnawave(email);
-        const rawKeys = remnaResult.data && Array.isArray(remnaResult.data) ? remnaResult.data : [];
-        const ownsKey = rawKeys.some((k) => k.username === username);
-
-        if (!ownsKey) {
-            return res.status(403).json({ error: "Ключ не принадлежит вашему аккаунту" });
-        }
-
-        const keyUuid = user_uuid || rawKeys.find((k) => k.username === username)?.uuid;
+        const email = owned.email;
+        const keyUuid = user_uuid || owned.key.uuid;
         const orderId = `renew-${userId}-${Date.now()}`;
         const returnUrl =
             (process.env.YOOKASSA_RETURN_URL ||
@@ -701,6 +736,91 @@ router.post("/keys/renew", async (req, res) => {
     }
 });
 
+/**
+ * GET /api/purchases/keys/:username/hwid-devices
+ */
+router.get("/keys/:username/hwid-devices", async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ error: "Требуется авторизация" });
+        }
+
+        const username = decodeURIComponent(req.params.username || "").trim();
+        if (!username) {
+            return res.status(400).json({ error: "Укажите ключ" });
+        }
+
+        const owned = await assertOwnedRemnaKey(userId, username);
+        if (owned.error) {
+            return res.status(owned.error.status).json({ error: owned.error.message });
+        }
+
+        const result = await getHwidDevicesForKey(hwidLookupOptions(owned));
+        if (!result.success) {
+            return res.status(500).json({
+                error: result.error || "Не удалось получить список устройств",
+            });
+        }
+
+        res.json({
+            success: true,
+            username,
+            userUuid: result.user_uuid || owned.key.uuid,
+            deviceLimit: result.hwid_device_limit ?? owned.key.hwidDeviceLimit ?? 3,
+            total: result.total,
+            devices: result.devices,
+        });
+    } catch (error) {
+        console.error("List HWID devices error:", error);
+        res.status(500).json({ error: "Ошибка получения устройств" });
+    }
+});
+
+/**
+ * DELETE /api/purchases/keys/:username/hwid-devices
+ * Body: { hwid: string }
+ */
+router.delete("/keys/:username/hwid-devices", async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ error: "Требуется авторизация" });
+        }
+
+        const username = decodeURIComponent(req.params.username || "").trim();
+        const { hwid } = req.body || {};
+
+        if (!username || !hwid) {
+            return res.status(400).json({ error: "Укажите ключ и идентификатор устройства" });
+        }
+
+        const owned = await assertOwnedRemnaKey(userId, username);
+        if (owned.error) {
+            return res.status(owned.error.status).json({ error: owned.error.message });
+        }
+
+        const result = await deleteHwidDeviceForKey({
+            ...hwidLookupOptions(owned),
+            hwid: String(hwid),
+        });
+        if (!result.success) {
+            return res.status(500).json({
+                error: result.error || "Не удалось удалить устройство",
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "Устройство отвязано. Слот освобождён.",
+            hwid: result.hwid,
+        });
+    } catch (error) {
+        console.error("Delete HWID device error:", error);
+        res.status(500).json({ error: "Ошибка удаления устройства" });
+    }
+});
+
 router.get("/remnawave/keys", async (req, res) => {
     try {
         const userId = req.user?.id;
@@ -708,20 +828,12 @@ router.get("/remnawave/keys", async (req, res) => {
             return res.status(401).json({ error: "Требуется авторизация" });
         }
 
-        const userResult = await pool.query("SELECT email FROM users WHERE id = $1", [userId]);
-        if (userResult.rows.length === 0) {
-            return res.status(404).json({ error: "Пользователь не найден" });
+        const account = await getAccountRemnaKeys(userId);
+        if (account.error) {
+            return res.status(account.error.status).json({ error: account.error.message });
         }
 
-        const email = userResult.rows[0].email;
-        const remnaResult = await getAllUsersFromRemnawave(email);
-
-        if (!remnaResult.success) {
-            return res.json({ success: true, keys: [] });
-        }
-
-        const raw = remnaResult.data && Array.isArray(remnaResult.data) ? remnaResult.data : [];
-        const keys = raw.map(mapRemnawaveKey);
+        const keys = account.rawKeys.map(mapRemnawaveKey);
 
         res.json({ success: true, keys });
     } catch (error) {

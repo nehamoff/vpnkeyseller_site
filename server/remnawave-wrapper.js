@@ -233,6 +233,8 @@ export function mapRemnawaveKey(user) {
         user.subscribeUrl ||
         null;
 
+    const keySource = user.keySource === "telegram" ? "telegram" : "site";
+
     return {
         uuid: user.uuid,
         username: user.username,
@@ -247,7 +249,115 @@ export function mapRemnawaveKey(user) {
         usedTrafficGb: formatTrafficBytes(used),
         leftoverGb: formatTrafficBytes(leftover),
         trafficUsedPercent: limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0,
+        hwidDeviceLimit: Number(user.hwidDeviceLimit) > 0 ? Number(user.hwidDeviceLimit) : 3,
+        keySource,
+        isTelegramKey: keySource === "telegram",
+        telegramId: user.telegramId != null ? String(user.telegramId) : null,
     };
+}
+
+function mergeRemnaUserLists(emailUsers = [], telegramUsers = []) {
+    const merged = new Map();
+
+    for (const user of emailUsers) {
+        if (!user?.uuid) continue;
+        merged.set(user.uuid, { ...user, keySource: "site" });
+    }
+
+    for (const user of telegramUsers) {
+        if (!user?.uuid) continue;
+        if (merged.has(user.uuid)) {
+            merged.set(user.uuid, { ...merged.get(user.uuid), keySource: "telegram" });
+        } else {
+            merged.set(user.uuid, { ...user, keySource: "telegram" });
+        }
+    }
+
+    return Array.from(merged.values());
+}
+
+function writePurchasedMapTempFile(purchasedMap) {
+    const purchasedMapPath = path.join(
+        os.tmpdir(),
+        `remna-purchased-${crypto.randomBytes(8).toString("hex")}.json`
+    );
+    fs.writeFileSync(purchasedMapPath, JSON.stringify(purchasedMap), "utf8");
+    return purchasedMapPath;
+}
+
+function unlinkPurchasedMapTempFile(purchasedMapPath) {
+    if (!purchasedMapPath) return;
+    try {
+        fs.unlinkSync(purchasedMapPath);
+    } catch {
+        /* ignore */
+    }
+}
+
+/**
+ * HWID-устройства ключа (username / UUID / Telegram ID).
+ */
+export async function getHwidDevicesForKey({ username, userUuid, telegramId } = {}) {
+    try {
+        if (process.env.TEST_MODE === "true") {
+            return {
+                success: true,
+                devices: [
+                    {
+                        hwid: "test-hwid-1",
+                        platform: "iOS",
+                        osVersion: "18.0",
+                        deviceModel: "iPhone 15",
+                        updatedAt: new Date().toISOString(),
+                    },
+                ],
+                total: 1,
+                hwid_device_limit: 3,
+                user_uuid: userUuid || "test-uuid",
+            };
+        }
+
+        const args = ["hwid-list", username || "", userUuid || "", telegramId || ""];
+        const result = await executePython(args);
+        return {
+            success: true,
+            devices: result.devices || [],
+            total: result.total ?? 0,
+            hwid_device_limit: result.hwid_device_limit ?? 3,
+            user_uuid: result.user_uuid,
+        };
+    } catch (error) {
+        console.error("Failed to list HWID devices:", error.message);
+        return { success: false, error: error.message, devices: [], total: 0 };
+    }
+}
+
+/** @deprecated use getHwidDevicesForKey */
+export async function getHwidDevicesByUsername(username) {
+    return getHwidDevicesForKey({ username });
+}
+
+/**
+ * Удалить HWID-устройство и освободить слот.
+ */
+export async function deleteHwidDeviceForKey({ username, userUuid, telegramId, hwid }) {
+    try {
+        if (process.env.TEST_MODE === "true") {
+            return { success: true, hwid };
+        }
+
+        const args = ["hwid-delete", username || "", hwid, userUuid || "", telegramId || ""];
+        const result = await executePython(args);
+        return { success: true, hwid: result.hwid || hwid };
+    } catch (error) {
+        console.error("Failed to delete HWID device:", error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+/** @deprecated use deleteHwidDeviceForKey */
+export async function deleteHwidDeviceByUsername(username, hwid) {
+    return deleteHwidDeviceForKey({ username, hwid });
 }
 
 /**
@@ -350,15 +460,63 @@ export async function getUserFromRemnawave(email) {
  * @param {string} email - User email
  * @returns {Promise<{success: boolean, data?: array, count?: number, error?: string}>}
  */
+export async function getUsersByTelegramId(telegramId, emailForPurchases = null) {
+    let purchasedMapPath = null;
+    try {
+        if (process.env.TEST_MODE === "true") {
+            const tgId = String(telegramId);
+            return {
+                success: true,
+                data: [
+                    {
+                        uuid: `tg-test-${tgId}`,
+                        username: `tg_user_${tgId}`,
+                        expireAt: new Date(Date.now() + 30 * 86400000).toISOString(),
+                        subscriptionUrl: "https://example.com/sub/tg-test",
+                        trafficLimitBytes: 26843545600,
+                        userTraffic: { usedTrafficBytes: 0 },
+                        hwidDeviceLimit: 3,
+                        keySource: "telegram",
+                    },
+                ],
+                count: 1,
+            };
+        }
+
+        const purchasedMap = emailForPurchases
+            ? await getPurchasedGbBytesByEmail(emailForPurchases)
+            : {};
+        purchasedMapPath = writePurchasedMapTempFile(purchasedMap);
+
+        const result = await executePython([
+            "get-by-telegram-id",
+            String(telegramId),
+            purchasedMapPath,
+        ]);
+        return {
+            success: result.success !== false,
+            data: result.data || [],
+            count: result.count || 0,
+            error: result.error,
+        };
+    } catch (error) {
+        console.error("Failed to get Telegram keys from Remnawave:", error.message);
+        return {
+            success: false,
+            data: [],
+            count: 0,
+            error: error.message,
+        };
+    } finally {
+        unlinkPurchasedMapTempFile(purchasedMapPath);
+    }
+}
+
 export async function getAllUsersFromRemnawave(email) {
     let purchasedMapPath = null;
     try {
         const purchasedMap = await getPurchasedGbBytesByEmail(email);
-        purchasedMapPath = path.join(
-            os.tmpdir(),
-            `remna-purchased-${crypto.randomBytes(8).toString("hex")}.json`
-        );
-        fs.writeFileSync(purchasedMapPath, JSON.stringify(purchasedMap), "utf8");
+        purchasedMapPath = writePurchasedMapTempFile(purchasedMap);
 
         const args = ["get-all-users", email, purchasedMapPath];
         const result = await executePython(args);
@@ -377,14 +535,35 @@ export async function getAllUsersFromRemnawave(email) {
             error: error.message
         };
     } finally {
-        if (purchasedMapPath) {
-            try {
-                fs.unlinkSync(purchasedMapPath);
-            } catch {
-                /* ignore */
-            }
-        }
+        unlinkPurchasedMapTempFile(purchasedMapPath);
     }
+}
+
+/**
+ * Все ключи аккаунта: с сайта (по email) + из Telegram-бота (по telegram_id).
+ */
+export async function getAllRemnaKeysForAccount(email, telegramId = null) {
+    const emailResult = await getAllUsersFromRemnawave(email);
+    const emailUsers =
+        emailResult.success && Array.isArray(emailResult.data) ? emailResult.data : [];
+
+    let telegramUsers = [];
+    let tgError;
+    if (telegramId) {
+        const tgResult = await getUsersByTelegramId(telegramId, email);
+        tgError = tgResult.error;
+        telegramUsers =
+            tgResult.success && Array.isArray(tgResult.data) ? tgResult.data : [];
+    }
+
+    const data = mergeRemnaUserLists(emailUsers, telegramUsers);
+
+    return {
+        success: data.length > 0,
+        data,
+        count: data.length,
+        error: data.length === 0 ? emailResult.error || tgError : undefined,
+    };
 }
 
 /**

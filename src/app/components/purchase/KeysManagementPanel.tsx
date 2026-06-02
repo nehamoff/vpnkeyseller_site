@@ -1,5 +1,6 @@
 import { Calendar, Check, Copy, HardDrive, RefreshCw } from "lucide-react";
 import type { Purchase } from "../../../lib/purchases-api";
+import { KeyDevicesSection } from "./KeyDevicesSection";
 
 export interface RemnaKey {
   uuid?: string;
@@ -12,6 +13,9 @@ export interface RemnaKey {
   usedTrafficGb?: number;
   leftoverGb?: number;
   trafficUsedPercent?: number;
+  hwidDeviceLimit?: number;
+  keySource?: "site" | "telegram";
+  isTelegramKey?: boolean;
 }
 
 interface KeysManagementPanelProps {
@@ -92,6 +96,9 @@ export function KeysManagementPanel({
                   onRenew={onRenew ? () => onRenew(key) : undefined}
                   onAddGb={onAddGb ? () => onAddGb(key) : undefined}
                   renewDisabled={renewDisabled}
+                  username={key.username}
+                  hwidDeviceLimit={key.hwidDeviceLimit}
+                  isTelegramKey={key.isTelegramKey ?? key.keySource === "telegram"}
                 />
               );
             })
@@ -162,6 +169,9 @@ function KeyCard({
   onRenew,
   onAddGb,
   renewDisabled,
+  username,
+  hwidDeviceLimit,
+  isTelegramKey,
 }: {
   title: string;
   expired: boolean;
@@ -175,6 +185,9 @@ function KeyCard({
   onRenew?: () => void;
   onAddGb?: () => void;
   renewDisabled?: boolean;
+  username?: string;
+  hwidDeviceLimit?: number;
+  isTelegramKey?: boolean;
 }) {
   return (
     <article
@@ -185,6 +198,11 @@ function KeyCard({
       <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
           <h3 className="text-lg font-semibold text-gray-900 truncate">{title}</h3>
+          {isTelegramKey && (
+            <span className="text-xs font-semibold bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full">
+              Telegram
+            </span>
+          )}
           {expired ? (
             <span className="text-xs font-semibold bg-red-100 text-red-700 px-2.5 py-0.5 rounded-full">
               Истёк
@@ -255,6 +273,10 @@ function KeyCard({
             </button>
           </div>
         </div>
+      )}
+
+      {username && (
+        <KeyDevicesSection username={username} deviceLimit={hwidDeviceLimit ?? 3} />
       )}
     </article>
   );

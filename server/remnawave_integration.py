@@ -373,12 +373,9 @@ class RemnawaveAPI:
             for user in users:
                 username = user.get("username", "")
                 if email_base in username:
-                    purchased_bytes = int(purchased_by_username.get(username, 0) or 0)
-                    rollover = self.apply_monthly_traffic_rollover(user, purchased_bytes)
-                    if rollover.get("success") and rollover.get("data"):
-                        matching_users.append(rollover["data"])
-                    else:
-                        matching_users.append(user)
+                    matching_users.append(
+                        self._finalize_user_with_rollover(user, purchased_by_username)
+                    )
 
             if matching_users:
                 logger.info(f"✓ Found {len(matching_users)} keys for {email}")
@@ -399,8 +396,155 @@ class RemnawaveAPI:
             logger.error(f"Failed to get all users for {email}: {str(e)}")
             return {"success": False, "error": str(e), "data": [], "count": 0}
 
+    @staticmethod
+    def _normalize_users_list(payload: Any) -> list:
+        """Приводит ответ Remnawave к списку пользователей."""
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, dict):
+            nested = payload.get("users")
+            if isinstance(nested, list):
+                return nested
+            if payload.get("uuid") or payload.get("username"):
+                return [payload]
+        return []
+
+    def _finalize_user_with_rollover(
+        self, user: Dict[str, Any], purchased_by_username: Optional[Dict[str, int]] = None
+    ) -> Dict[str, Any]:
+        purchased_by_username = purchased_by_username or {}
+        username = user.get("username", "")
+        purchased_bytes = int(purchased_by_username.get(username, 0) or 0)
+        rollover = self.apply_monthly_traffic_rollover(user, purchased_bytes)
+        if rollover.get("success") and rollover.get("data"):
+            return rollover["data"]
+        return user
+
+    def get_users_by_telegram_id(
+        self, telegram_id: int, purchased_by_username: Optional[Dict[str, int]] = None
+    ) -> Dict[str, Any]:
+        """Ключ(и) из Telegram-бота по telegramId в панели Remnawave."""
+        purchased_by_username = purchased_by_username or {}
+        try:
+            response = requests.get(
+                f"{self.base_url}/api/users/by-telegram-id/{int(telegram_id)}",
+                headers=self._get_headers(),
+                timeout=30,
+            )
+
+            if response.status_code == 404:
+                return {"success": True, "data": [], "count": 0}
+
+            response.raise_for_status()
+            payload = response.json().get("response", {})
+            users = self._normalize_users_list(payload)
+
+            matching_users = []
+            for user in users:
+                matching_users.append(
+                    self._finalize_user_with_rollover(user, purchased_by_username)
+                )
+
+            if matching_users:
+                logger.info(
+                    f"✓ Found {len(matching_users)} Telegram key(s) for tg_id {telegram_id}"
+                )
+                return {
+                    "success": True,
+                    "data": matching_users,
+                    "count": len(matching_users),
+                }
+
+            return {"success": True, "data": [], "count": 0}
+        except Exception as e:
+            logger.error(f"Failed to get users by telegram_id {telegram_id}: {e}")
+            return {"success": False, "error": str(e), "data": [], "count": 0}
+
+    def get_user_by_uuid(self, user_uuid: str) -> Dict[str, Any]:
+        """Get user by UUID (прямой запрос к API)."""
+        try:
+            response = requests.get(
+                f"{self.base_url}/api/users/{user_uuid}",
+                headers=self._get_headers(),
+                timeout=30,
+            )
+            if response.status_code == 404:
+                return {"success": False, "error": "User not found"}
+            response.raise_for_status()
+            user = response.json().get("response", {})
+            if not user:
+                return {"success": False, "error": "User not found"}
+            return {
+                "success": True,
+                "data": user,
+                "user_uuid": user.get("uuid"),
+            }
+        except Exception as e:
+            logger.error(f"Failed to get user by uuid {user_uuid}: {e}")
+            return {"success": False, "error": str(e)}
+
+    def get_user_by_username_direct(self, username: str) -> Dict[str, Any]:
+        """Get user by exact username (прямой API, без перебора списка)."""
+        try:
+            from urllib.parse import quote
+
+            safe_username = quote(username, safe="")
+            response = requests.get(
+                f"{self.base_url}/api/users/by-username/{safe_username}",
+                headers=self._get_headers(),
+                timeout=30,
+            )
+            if response.status_code == 404:
+                return {"success": False, "error": "User not found"}
+            response.raise_for_status()
+            user = response.json().get("response", {})
+            if not user:
+                return {"success": False, "error": "User not found"}
+            logger.info(f"Found user by username API: {username}")
+            return {
+                "success": True,
+                "data": user,
+                "user_uuid": user.get("uuid"),
+            }
+        except Exception as e:
+            logger.error(f"Failed to get user by username {username}: {e}")
+            return {"success": False, "error": str(e)}
+
+    def resolve_user(
+        self,
+        username: Optional[str] = None,
+        user_uuid: Optional[str] = None,
+        telegram_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Найти пользователя: UUID → Telegram ID → username."""
+        if user_uuid:
+            by_uuid = self.get_user_by_uuid(user_uuid)
+            if by_uuid.get("success"):
+                return by_uuid
+
+        if telegram_id:
+            tg_result = self.get_users_by_telegram_id(int(telegram_id))
+            if tg_result.get("success") and tg_result.get("data"):
+                user = tg_result["data"][0]
+                return {
+                    "success": True,
+                    "data": user,
+                    "user_uuid": user.get("uuid"),
+                }
+
+        if username:
+            direct = self.get_user_by_username_direct(username)
+            if direct.get("success"):
+                return direct
+            return self.get_user_by_username(username)
+
+        return {"success": False, "error": "User not found"}
+
     def get_user_by_username(self, username: str) -> Dict[str, Any]:
         """Get user information by exact username"""
+        direct = self.get_user_by_username_direct(username)
+        if direct.get("success"):
+            return direct
         try:
             response = requests.get(
                 f"{self.base_url}/api/users",
@@ -649,6 +793,97 @@ class RemnawaveAPI:
             logger.error(f"Failed to add GB to {username}: {str(e)}")
             return {"success": False, "error": str(e)}
 
+    def get_hwid_devices(self, user_uuid: str) -> Dict[str, Any]:
+        """Список HWID-устройств, привязанных к ключу."""
+        try:
+            response = requests.get(
+                f"{self.base_url}/api/hwid/devices/{user_uuid}",
+                headers=self._get_headers(),
+                timeout=30,
+            )
+            response.raise_for_status()
+            payload = response.json().get("response", {})
+            devices = payload.get("devices") or []
+            mapped = []
+            for device in devices:
+                mapped.append(
+                    {
+                        "hwid": device.get("hwid"),
+                        "platform": device.get("platform"),
+                        "osVersion": device.get("osVersion"),
+                        "deviceModel": device.get("deviceModel"),
+                        "userAgent": device.get("userAgent"),
+                        "requestIp": device.get("requestIp"),
+                        "createdAt": device.get("createdAt"),
+                        "updatedAt": device.get("updatedAt"),
+                    }
+                )
+            return {
+                "success": True,
+                "devices": mapped,
+                "total": int(payload.get("total") or len(mapped)),
+            }
+        except Exception as e:
+            logger.error(f"Failed to list HWID devices for {user_uuid}: {e}")
+            return {"success": False, "error": str(e), "devices": [], "total": 0}
+
+    def delete_hwid_device(self, user_uuid: str, hwid: str) -> Dict[str, Any]:
+        """Удалить одно HWID-устройство (освободить слот)."""
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/hwid/devices/delete",
+                headers=self._get_headers(),
+                json={"userUuid": user_uuid, "hwid": hwid},
+                timeout=30,
+            )
+            response.raise_for_status()
+            logger.info(f"✓ Deleted HWID device for {user_uuid}: {hwid[:16]}…")
+            return {"success": True, "hwid": hwid}
+        except Exception as e:
+            logger.error(f"Failed to delete HWID {hwid} for {user_uuid}: {e}")
+            return {"success": False, "error": str(e)}
+
+    def get_hwid_devices_for_key(
+        self,
+        username: Optional[str] = None,
+        user_uuid: Optional[str] = None,
+        telegram_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        user_data = self.resolve_user(username, user_uuid, telegram_id)
+        if not user_data.get("success"):
+            return user_data
+        resolved_uuid = user_data.get("user_uuid") or user_data["data"].get("uuid")
+        if not resolved_uuid:
+            return {"success": False, "error": "UUID ключа не найден"}
+        result = self.get_hwid_devices(resolved_uuid)
+        if result.get("success"):
+            result["user_uuid"] = resolved_uuid
+            result["hwid_device_limit"] = int(
+                user_data["data"].get("hwidDeviceLimit") or 3
+            )
+        return result
+
+    def get_hwid_devices_by_username(self, username: str) -> Dict[str, Any]:
+        return self.get_hwid_devices_for_key(username=username)
+
+    def delete_hwid_device_for_key(
+        self,
+        hwid: str,
+        username: Optional[str] = None,
+        user_uuid: Optional[str] = None,
+        telegram_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        user_data = self.resolve_user(username, user_uuid, telegram_id)
+        if not user_data.get("success"):
+            return user_data
+        resolved_uuid = user_data.get("user_uuid") or user_data["data"].get("uuid")
+        if not resolved_uuid:
+            return {"success": False, "error": "UUID ключа не найден"}
+        return self.delete_hwid_device(resolved_uuid, hwid)
+
+    def delete_hwid_device_by_username(self, username: str, hwid: str) -> Dict[str, Any]:
+        return self.delete_hwid_device_for_key(hwid, username=username)
+
     def give_gb(self, email: str, gb_amount: float) -> Dict[str, Any]:
         """Add traffic to user by email (first matching key)."""
         try:
@@ -674,6 +909,9 @@ def main():
         print("  rollover-user <username>             - Apply monthly traffic rollover")
         print("  add-gb <email> <gb_amount>          - Add GB by email")
         print("  add-gb-user <username> <gb_amount>  - Add GB by username")
+        print("  hwid-list <username>                 - List HWID devices")
+        print("  hwid-delete <username> <hwid>        - Delete HWID device")
+        print("  get-by-telegram-id <tg_id>           - Get key(s) by Telegram ID")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -742,6 +980,36 @@ def main():
             gb_amount = float(sys.argv[3])
             result = api.give_gb_by_username(username, gb_amount)
 
+        elif command == "hwid-list":
+            username = sys.argv[2] if len(sys.argv) > 2 else ""
+            user_uuid = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
+            telegram_id = (
+                int(sys.argv[4])
+                if len(sys.argv) > 4 and sys.argv[4] and str(sys.argv[4]).isdigit()
+                else None
+            )
+            result = api.get_hwid_devices_for_key(
+                username=username or None,
+                user_uuid=user_uuid,
+                telegram_id=telegram_id,
+            )
+
+        elif command == "hwid-delete":
+            username = sys.argv[2] if len(sys.argv) > 2 else ""
+            hwid = sys.argv[3] if len(sys.argv) > 3 else ""
+            user_uuid = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
+            telegram_id = (
+                int(sys.argv[5])
+                if len(sys.argv) > 5 and sys.argv[5] and str(sys.argv[5]).isdigit()
+                else None
+            )
+            result = api.delete_hwid_device_for_key(
+                hwid,
+                username=username or None,
+                user_uuid=user_uuid,
+                telegram_id=telegram_id,
+            )
+
         elif command == "get-user":
             email = sys.argv[2]
             user_data = api.get_user_by_email(email)
@@ -760,6 +1028,16 @@ def main():
                         purchased_map = json.load(f)
             users_data = api.get_all_users_by_email(email, purchased_map)
             result = users_data
+
+        elif command == "get-by-telegram-id":
+            telegram_id = int(sys.argv[2])
+            purchased_map: Dict[str, int] = {}
+            if len(sys.argv) > 3 and sys.argv[3]:
+                map_path = sys.argv[3]
+                if os.path.isfile(map_path):
+                    with open(map_path, encoding="utf-8") as f:
+                        purchased_map = json.load(f)
+            result = api.get_users_by_telegram_id(telegram_id, purchased_map)
 
         else:
             print(f"Unknown command: {command}")
