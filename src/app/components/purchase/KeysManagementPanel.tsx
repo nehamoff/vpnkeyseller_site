@@ -1,4 +1,4 @@
-import { Calendar, Check, Copy, HardDrive, RefreshCw } from "lucide-react";
+import { Calendar, Check, Copy, ExternalLink, HardDrive, RefreshCw } from "lucide-react";
 import type { Purchase } from "../../../lib/purchases-api";
 import { KeyDevicesSection } from "./KeyDevicesSection";
 
@@ -272,6 +272,15 @@ function KeyCard({
               )}
             </button>
           </div>
+          <a
+            href={subscriptionUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
+          >
+            <ExternalLink className="h-4 w-4 shrink-0" />
+            Подключиться
+          </a>
         </div>
       )}
 

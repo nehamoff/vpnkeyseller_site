@@ -334,9 +334,15 @@ class RemnawaveAPI:
             data = response.json().get("response", {})
             users = data.get("users", [])
 
-            # Find user by email in username
+            # Find user by email in username or panel email field
+            email_lower = email.strip().lower()
+            email_base = email.split("@")[0]
             for user in users:
-                if email.split("@")[0] in user.get("username", ""):
+                username = user.get("username", "")
+                panel_email = (user.get("email") or "").strip().lower()
+                if panel_email == email_lower or (
+                    email_base and email_base in username
+                ):
                     return {
                         "success": True,
                         "data": user,
@@ -366,13 +372,17 @@ class RemnawaveAPI:
             data = response.json().get("response", {})
             users = data.get("users", [])
 
-            # Find all users with this email in username
+            # Find keys by username prefix or email field in panel
+            email_lower = email.strip().lower()
             email_base = email.split("@")[0]
             matching_users = []
 
             for user in users:
                 username = user.get("username", "")
-                if email_base in username:
+                panel_email = (user.get("email") or "").strip().lower()
+                if panel_email == email_lower or (
+                    email_base and email_base in username
+                ):
                     matching_users.append(
                         self._finalize_user_with_rollover(user, purchased_by_username)
                     )
@@ -576,31 +586,15 @@ class RemnawaveAPI:
     def update_user_email(self, user_uuid: str, email: str) -> Dict[str, Any]:
         """Update user email in Remnawave panel"""
         try:
-            # Get user first to find username
-            response = requests.get(
-                f"{self.base_url}/api/users",
-                headers=self._get_headers(),
-                params={"size": 100},
-                timeout=30,
-            )
-            response.raise_for_status()
-            data = response.json().get("response", {})
-            users = data.get("users", [])
+            user_data = self.get_user_by_uuid(user_uuid)
+            if not user_data.get("success"):
+                return user_data
 
-            # Find user by UUID
-            user = None
-            for u in users:
-                if u.get("uuid") == user_uuid:
-                    user = u
-                    break
-
-            if not user:
-                logger.error(f"User with UUID {user_uuid} not found")
-                return {"success": False, "error": "User not found"}
-
+            user = user_data["data"]
             username = user.get("username")
+            if not username:
+                return {"success": False, "error": "Username missing"}
 
-            # Update email
             payload = {
                 "username": username,
                 "email": email,
@@ -616,10 +610,67 @@ class RemnawaveAPI:
             response.raise_for_status()
             result = response.json()
             logger.info(f"✓ Updated email for user {username}: {email}")
-            return {"success": True, "data": result}
+            return {"success": True, "data": result, "username": username}
         except Exception as e:
-            logger.error(f"Failed to update email for user {user_uuid}: {str(e)}")
+            logger.error(f"Failed to update email for user {user_uuid}: {e}")
             return {"success": False, "error": str(e)}
+
+    def sync_account_emails(
+        self,
+        old_email: str,
+        new_email: str,
+        telegram_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Обновить email во всех ключах аккаунта после смены почты на сайте."""
+        keys_by_uuid: Dict[str, Dict[str, Any]] = {}
+
+        by_email = self.get_all_users_by_email(old_email)
+        for user in by_email.get("data") or []:
+            uuid = user.get("uuid")
+            if uuid:
+                keys_by_uuid[uuid] = user
+
+        if telegram_id:
+            tg_result = self.get_users_by_telegram_id(int(telegram_id))
+            for user in tg_result.get("data") or []:
+                uuid = user.get("uuid")
+                if uuid:
+                    keys_by_uuid[uuid] = user
+
+        if not keys_by_uuid:
+            logger.info(f"No Remnawave keys to sync email {old_email} → {new_email}")
+            return {
+                "success": True,
+                "updated": 0,
+                "total": 0,
+                "failed": [],
+            }
+
+        updated = 0
+        failed = []
+        for user_uuid in keys_by_uuid:
+            result = self.update_user_email(user_uuid, new_email)
+            if result.get("success"):
+                updated += 1
+            else:
+                failed.append(
+                    {
+                        "uuid": user_uuid,
+                        "username": keys_by_uuid[user_uuid].get("username"),
+                        "error": result.get("error"),
+                    }
+                )
+
+        logger.info(
+            f"✓ Synced Remnawave email {old_email} → {new_email}: "
+            f"{updated}/{len(keys_by_uuid)} keys"
+        )
+        return {
+            "success": len(failed) == 0,
+            "updated": updated,
+            "total": len(keys_by_uuid),
+            "failed": failed,
+        }
 
     def _renew_user_record(self, user: Dict[str, Any], days: int) -> Dict[str, Any]:
         """Extend subscription for an existing Remnawave user."""
@@ -911,7 +962,7 @@ def main():
         print("  add-gb-user <username> <gb_amount>  - Add GB by username")
         print("  hwid-list <username>                 - List HWID devices")
         print("  hwid-delete <username> <hwid>        - Delete HWID device")
-        print("  get-by-telegram-id <tg_id>           - Get key(s) by Telegram ID")
+        print("  sync-emails <old_email> <new_email> [telegram_id]")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -1038,6 +1089,16 @@ def main():
                     with open(map_path, encoding="utf-8") as f:
                         purchased_map = json.load(f)
             result = api.get_users_by_telegram_id(telegram_id, purchased_map)
+
+        elif command == "sync-emails":
+            old_email = sys.argv[2]
+            new_email = sys.argv[3]
+            telegram_id = (
+                int(sys.argv[4])
+                if len(sys.argv) > 4 and sys.argv[4] and str(sys.argv[4]).isdigit()
+                else None
+            )
+            result = api.sync_account_emails(old_email, new_email, telegram_id)
 
         else:
             print(f"Unknown command: {command}")

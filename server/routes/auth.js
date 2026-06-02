@@ -8,7 +8,7 @@ import {
   sendEmailChangeCode,
   sendEmailChangedNotification,
 } from "../email.js";
-import { createVpnUser } from "../remnawave-wrapper.js";
+import { createVpnUser, syncRemnawaveAccountEmails } from "../remnawave-wrapper.js";
 
 const router = Router();
 
@@ -420,7 +420,7 @@ router.post("/change-email/verify", async (req, res) => {
     }
 
     const userResult = await pool.query(
-      "SELECT id, email FROM users WHERE id = $1",
+      "SELECT id, email, telegram_id FROM users WHERE id = $1",
       [userId],
     );
 
@@ -429,7 +429,17 @@ router.post("/change-email/verify", async (req, res) => {
     }
 
     const oldEmail = userResult.rows[0].email;
+    const telegramId = userResult.rows[0].telegram_id;
     const newEmail = record.new_email;
+
+    const remnaSync = await syncRemnawaveAccountEmails(
+      oldEmail,
+      newEmail,
+      telegramId ? String(telegramId) : null,
+    );
+    if (!remnaSync.success && remnaSync.total > 0) {
+      console.error("Remnawave email sync partial failure:", remnaSync);
+    }
 
     await pool.query(
       "UPDATE users SET email = $1, email_verified = true WHERE id = $2",
@@ -449,6 +459,10 @@ router.post("/change-email/verify", async (req, res) => {
       message: "Email успешно изменён",
       token,
       user: { id: userId, email: newEmail },
+      remnawave: {
+        keysUpdated: remnaSync.updated ?? 0,
+        keysTotal: remnaSync.total ?? 0,
+      },
     });
   } catch (error) {
     console.error("Change email verify error:", error);

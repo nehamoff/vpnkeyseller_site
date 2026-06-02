@@ -566,6 +566,28 @@ export async function getAllRemnaKeysForAccount(email, telegramId = null) {
     };
 }
 
+export async function syncRemnawaveAccountEmails(oldEmail, newEmail, telegramId = null) {
+    try {
+        if (process.env.TEST_MODE === "true") {
+            return { success: true, updated: 0, total: 0, failed: [] };
+        }
+
+        const args = ["sync-emails", oldEmail, newEmail];
+        if (telegramId) args.push(String(telegramId));
+
+        const result = await executePython(args);
+        return {
+            success: result.success !== false,
+            updated: result.updated ?? 0,
+            total: result.total ?? 0,
+            failed: result.failed || [],
+        };
+    } catch (error) {
+        console.error("Failed to sync Remnawave emails:", error.message);
+        return { success: false, error: error.message, updated: 0, total: 0, failed: [] };
+    }
+}
+
 /**
  * Legacy function for compatibility - creates inbound key
  * Maps to createVpnUser
