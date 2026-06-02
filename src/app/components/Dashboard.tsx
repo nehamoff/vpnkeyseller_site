@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import {
   Mail,
   Lock,
@@ -640,6 +641,24 @@ export function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Link
+        to="/my-keys"
+        className="flex items-center justify-between gap-4 surface-card-lg backdrop-blur-xl rounded-3xl p-6 border border-coffee-latte/40 shadow-coffee-lg hover:shadow-coffee-xl hover:border-coffee-mocha/30 transition-all group"
+      >
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-coffee-espresso to-coffee-espresso/85 flex items-center justify-center shrink-0 shadow-coffee">
+            <KeyRound className="w-7 h-7 text-coffee-milk" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-xl font-semibold text-coffee-espresso">Подключить VPN</h3>
+            <p className="text-sm text-coffee-mocha mt-1">
+              Купите ключ, продлите подписку или скопируйте ссылку для клиента
+            </p>
+          </div>
+        </div>
+        <ChevronRight className="w-6 h-6 text-coffee-latte group-hover:text-coffee-espresso group-hover:translate-x-0.5 transition-all shrink-0" />
+      </Link>
 
       <a
         href={TELEGRAM_BOT_BANNER_URL}

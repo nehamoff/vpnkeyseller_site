@@ -3,7 +3,6 @@ import {
   Loader2,
   ShoppingCart,
   AlertCircle,
-  Mail,
   Send,
   Download,
   Smartphone,
@@ -697,26 +696,6 @@ export function MyKeys() {
             onSelect={openCheckout}
             disabled={paymentDisabled}
           />
-
-          {user && (
-            <details className="rounded-xl border border-coffee-latte/50 bg-coffee-cappuccino/30 text-sm">
-              <summary className="cursor-pointer px-4 py-3 text-coffee-mocha font-medium">
-                Данные аккаунта
-              </summary>
-              <div className="px-4 pb-4 pt-0 grid md:grid-cols-2 gap-3 border-t border-coffee-latte/40">
-                <div className="flex items-center gap-2">
-                  <Mail className="w-4 h-4 text-coffee-mocha/90" />
-                  <span className="text-coffee-espresso">{user.email}</span>
-                </div>
-                {user.telegram_username && (
-                  <div className="flex items-center gap-2">
-                    <Send className="w-4 h-4 text-coffee-mocha/90" />
-                    <span className="text-coffee-espresso">@{user.telegram_username}</span>
-                  </div>
-                )}
-              </div>
-            </details>
-          )}
         </>
       ) : (
         <>
